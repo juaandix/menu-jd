@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Menú JD</title>
+  <meta name="description" content="Menú intercambiable y registro diario de comidas.">
+  <meta name="theme-color" content="#2f7a4f" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#141a16" media="(prefers-color-scheme: dark)">
+  <!-- iOS -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Menú JD">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="profile-bar">
+    <select id="profileSelect" aria-label="Perfil"></select>
+  </div>
+  <main id="app">
+    <!-- HOY -->
+    <section id="view-hoy" class="view" aria-label="Hoy">
+      <header class="top">
+        <button class="icon-btn" id="prevDay" aria-label="Día anterior">‹</button>
+        <div class="date-wrap">
+          <h1 id="dateTitle">Hoy</h1>
+          <div class="type-row">
+            <select id="dayType" aria-label="Tipo de día"></select>
+            <button class="icon-btn small" id="gcalDetect" aria-label="Detectar tipo de día desde Google Calendar" title="Detectar desde calendario">📅</button>
+          </div>
+        </div>
+        <button class="icon-btn" id="nextDay" aria-label="Día siguiente">›</button>
+      </header>
+
+      <div class="summary" id="summary"></div>
+      <div id="slots" class="slots"></div>
+    </section>
+
+    <!-- MENÚ -->
+    <section id="view-menu" class="view" hidden aria-label="Menú">
+      <header class="page-head">
+        <p class="eyebrow">Pesos en cocinado</p>
+        <h1>Menú</h1>
+        <p class="lead" id="menuLead"></p>
+      </header>
+      <div class="builder" id="builderSection">
+        <h2>Monta tu día</h2>
+        <div class="sel">
+          <label for="bD">Desayuno<select id="bD"></select></label>
+          <label for="bC">Comida<select id="bC"></select></label>
+          <label for="bN">Cena<select id="bN"></select></label>
+          <label for="bT">Tipo de día<select id="bT"></select></label>
+        </div>
+        <div class="total" id="bTot"></div>
+        <button class="btn" id="bApply">Usar este plan para hoy</button>
+      </div>
+      <div id="menuList"></div>
+    </section>
+
+    <!-- RECETAS -->
+    <section id="view-recetas" class="view" hidden aria-label="Recetas">
+      <header class="page-head">
+        <p class="eyebrow">Para hacer en lote</p>
+        <h1>Recetas y notas</h1>
+      </header>
+      <div id="recipeList" class="cards"></div>
+      <section class="block">
+        <h2>Notas</h2>
+        <ul id="notes" class="notes"></ul>
+      </section>
+      <section class="block">
+        <h2>Copia de seguridad</h2>
+        <p class="muted">Tu registro se guarda solo en este móvil. Exporta de vez en cuando por si cambias de teléfono o borras datos del navegador.</p>
+        <div class="row">
+          <button class="btn ghost" id="exportBtn">Exportar registro</button>
+          <label class="btn ghost file-btn" for="importFile">Importar registro</label>
+          <input type="file" id="importFile" accept="application/json" hidden>
+        </div>
+        <p class="muted small" id="backupMsg" role="status"></p>
+      </section>
+      <section class="block" id="gcalSection">
+        <h2>Calendario de turnos (Google)</h2>
+        <p class="muted">Conecta tu Google Calendar para que el botón 📅 de la pantalla Hoy proponga si ese día trabajas, buscando una palabra clave en el título de los eventos de ese día. Necesita conexión a internet; el resto de la app sigue funcionando sin ella.</p>
+        <div class="sel">
+          <label for="gcalClientId">Client ID de Google<input type="text" id="gcalClientId" placeholder="xxxx.apps.googleusercontent.com"></label>
+          <label for="gcalKeyword">Palabra clave<input type="text" id="gcalKeyword" placeholder="turno"></label>
+        </div>
+        <div class="row">
+          <button class="btn ghost" id="gcalSave">Guardar ajustes</button>
+          <button class="btn ghost" id="gcalDisconnect">Desconectar</button>
+        </div>
+        <p class="muted small" id="gcalMsg" role="status"></p>
+        <p class="muted small">¿Cómo consigo el Client ID? En <a href="https://console.cloud.google.com/" target="_blank" rel="noopener">Google Cloud Console</a>: crea un proyecto → activa la API "Google Calendar API" → pantalla de consentimiento OAuth (tipo Externo, añádete como usuario de prueba) → Credenciales → "Crear credenciales" → "ID de cliente de OAuth" tipo Aplicación web → en "Orígenes de JavaScript autorizados" añade exactamente <code id="gcalOrigin"></code> → copia el Client ID y pégalo arriba.</p>
+      </section>
+    </section>
+  </main>
+
+  <nav class="tabbar" aria-label="Secciones">
+    <button data-view="hoy" class="active"><span class="ti">●</span>Hoy</button>
+    <button data-view="menu"><span class="ti">☰</span>Menú</button>
+    <button data-view="recetas"><span class="ti">✎</span>Recetas</button>
+  </nav>
+
+  <!-- Hoja para añadir -->
+  <div class="sheet-backdrop" id="sheetBg" hidden></div>
+  <div class="sheet" id="sheet" hidden role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
+    <div class="sheet-head">
+      <h2 id="sheetTitle">Añadir</h2>
+      <button class="icon-btn" id="sheetClose" aria-label="Cerrar">✕</button>
+    </div>
+    <div id="sheetBody"></div>
+  </div>
+
+  <div class="toast" id="toast" role="status" hidden></div>
+
+  <script src="data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
