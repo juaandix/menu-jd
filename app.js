@@ -2,6 +2,11 @@
 const $ = (s) => document.querySelector(s);
 const r0 = (x) => Math.round(x);
 const r1 = (x) => Math.round(x * 10) / 10;
+const f1 = (x) => r1(x).toLocaleString("es-ES"); // para mostrar: coma decimal
+// Los platos del plan de Cristina llevan "(S1 · Lunes)" en el nombre: se muestra aparte, como etiqueta.
+const TAG_RE = /\s*\((S\d+\s*·\s*[^)]+)\)/;
+function splitName(n) { const m = String(n).match(TAG_RE); return m ? { t: String(n).replace(TAG_RE, ""), tag: m[1] } : { t: String(n), tag: "" }; }
+function nameHTML(n) { const x = splitName(n); return esc(x.t) + (x.tag ? ` <span class="tag">${esc(x.tag)}</span>` : ""); }
 
 /* ---------- perfil activo ---------- */
 const PROFILE_KEY = "menujd.profile.v1";
@@ -103,28 +108,25 @@ function renderHoy() {
   const pLeft = profile.proteinTarget - t.p;
   const cost = itemsCost(day.items);
   $("#summary").innerHTML = `
-    <div class="big"><strong>${r0(left)}</strong><span>${left >= 0 ? "kcal restantes" : "kcal por encima del objetivo"}</span></div>
-    ${meter(adj ? "Calorías (ajustado por pasos)" : "Calorías", t.k, target, "kcal")}
+    <div class="big"><strong class="${left < -60 ? "over" : ""}">${r0(Math.abs(left))}</strong><span>${left >= 0 ? "kcal restantes" : "kcal por encima"}</span>
+      <span class="big-side">${pLeft > 0 ? `faltan <b>${r0(pLeft)} g</b> de proteína` : `proteína <b>cubierta</b>`}</span></div>
+    ${meter(adj ? `Calorías <small>${adj > 0 ? "+" : ""}${adj} por pasos</small>` : "Calorías", t.k, target, "kcal")}
     ${meter("Proteína", t.p, profile.proteinTarget, "g")}
-    <div class="chips">
-      <span class="chip">C ${r0(t.c)} g</span><span class="chip">G ${r0(t.f)} g</span>
-      ${pLeft > 0 ? `<span class="chip">Faltan ${r0(pLeft)} g de proteína</span>` : `<span class="chip">Proteína cubierta</span>`}
-      ${left < -60 ? `<span class="chip warn">Te has pasado ${r0(-left)} kcal</span>` : ""}
-      ${cost.priced ? `<span class="chip">Coste ${costLabel(cost)}</span>` : ""}
-    </div>`;
+    <div class="mini-row"><span>Carbohidratos <b>${r0(t.c)} g</b></span><span>Grasa <b>${r0(t.f)} g</b></span>${cost.priced ? `<span>Coste <b>${costLabel(cost)}</b></span>` : ""}</div>`;
   renderSteps(day, type, key, adj);
 
   $("#slots").innerHTML = profile.slots.map((s) => {
     const items = day.items.map((x, idx) => ({ ...x, idx })).filter((x) => x.slot === s.id);
-    const hint = s.id === "S" && type.mods ? `${s.hint} · ${type.mods} en este tipo de día` : s.hint;
-    return `<div class="slot">
-      <div class="slot-head"><h3>${s.label}<small>${hint}</small></h3>
-        <button class="add-btn" data-add="${s.id}">+ Añadir</button></div>
+    const hint = s.id === "S" && type.mods ? `${s.hint} · ${type.mods} hoy` : s.hint;
+    const st = totals(items);
+    return `<div class="slot${items.length ? "" : " is-empty"}">
+      <div class="slot-head"><h3>${s.label}<small>${items.length ? `<b>${r0(st.k)} kcal · ${r0(st.p)} g P</b> · ${hint}` : hint}</small></h3>
+        <button class="add-btn" data-add="${s.id}" aria-label="Añadir a ${s.label}">+ Añadir</button></div>
       ${items.length ? items.map((x) => `
-        <div class="entry"><button class="name" type="button" data-entry="${x.idx}" aria-label="Editar ${esc(x.n)}"><b>${esc(x.n)}</b><span>${x.ref ? x.ref + " · " : ""}P ${r1(x.p)} · C ${r0(x.c || 0)} · G ${r0(x.f || 0)}${costLabel(itemDishCost(x)) ? " · " + costLabel(itemDishCost(x)) : ""}${x.i ? " · ✎" : ""}</span></button>
+        <div class="entry"><button class="name" type="button" data-entry="${x.idx}" aria-label="Editar ${esc(x.n)}"><b>${nameHTML(x.n)}</b><span>${x.ref ? x.ref + " · " : ""}P ${f1(x.p)} · C ${r0(x.c || 0)} · G ${r0(x.f || 0)}${costLabel(itemDishCost(x)) ? " · " + costLabel(itemDishCost(x)) : ""}${x.i ? " · ✎" : ""}</span></button>
           <span class="kc">${r0(x.k)}</span>
           <button class="del" data-del="${x.idx}" aria-label="Quitar ${esc(x.n)}">✕</button></div>`).join("")
-      : `<p class="empty">Nada registrado.</p>`}
+      : ""}
     </div>`;
   }).join("");
 }
@@ -146,14 +148,12 @@ function renderSteps(day, type, key, adj) {
   const fmt = (n) => n.toLocaleString("es-ES");
   let msg;
   if (type.steps && typeof day.steps === "number")
-    msg = `Este objetivo ya cuenta con ~${fmt(type.steps)} pasos: ${adj > 0 ? "+" : ""}${adj} kcal → ${fmt(type.kcal + adj)} kcal.`;
-  else if (type.steps)
-    msg = `El objetivo de este tipo de día ya cuenta con ~${fmt(type.steps)} pasos. Apunta los reales para ajustarlo.`;
-  else if (typeof day.steps === "number")
-    msg = `≈ ${fmt(Math.round(day.steps * KCAL_PER_STEP_KG * latestWeight(key)))} kcal de actividad andando (informativo: este tipo de día no ajusta el objetivo por pasos).`;
-  else msg = "Opcional: quedan en el historial semanal.";
-  if (typeof day.steps === "number" && type.steps && key === iso(new Date())) msg += " El día no ha terminado: actualízalos por la noche.";
+    msg = `${adj > 0 ? "+" : ""}${adj} kcal al objetivo (cuenta con ~${fmt(type.steps)} pasos)${key === iso(new Date()) ? " · el día sigue: actualiza por la noche" : ""}`;
+  else if (type.steps) msg = `El objetivo ya cuenta con ~${fmt(type.steps)} pasos.`;
+  else if (typeof day.steps === "number") msg = `≈ ${fmt(Math.round(day.steps * KCAL_PER_STEP_KG * latestWeight(key)))} kcal andando (no ajusta el objetivo).`;
+  else msg = "";
   $("#stepsInfo").textContent = msg;
+  $("#stepsInfo").hidden = !msg;
 }
 function itemsCost(items) {
   let eur = 0, missing = 0, priced = 0;
@@ -180,7 +180,7 @@ function openEntry(idx) {
     ${x.i ? `<ul class="ent-ings">${x.i.map((r) => `<li>${esc(r)}</li>`).join("")}</ul>` : ""}
     <div class="portion-card">
       <p class="muted small">Ración</p>
-      <div class="portion-row">${PORTIONS.map((pt) => `<button class="portion-btn${Math.abs(pt.mult - mult) < 0.01 ? " is-default" : ""}" data-ent-portion="${pt.mult}"><b>${pt.label}×</b><span>${r0((x.k / mult) * pt.mult)} kcal · ${r1((x.p / mult) * pt.mult)} g P</span></button>`).join("")}</div>
+      <div class="portion-row">${PORTIONS.map((pt) => `<button class="portion-btn${Math.abs(pt.mult - mult) < 0.01 ? " is-default" : ""}" data-ent-portion="${pt.mult}"><b>${pt.label}×</b><span>${r0((x.k / mult) * pt.mult)} kcal · ${f1((x.p / mult) * pt.mult)} g P</span></button>`).join("")}</div>
       <p class="muted small">Mover a</p>
       <div class="recent-row">${profile.slots.filter((s) => s.id !== x.slot).map((s) => `<button class="chip-opt" data-ent-move="${s.id}">${s.label}</button>`).join("")}</div>
     </div>
@@ -272,24 +272,26 @@ function showSheetList() {
 function renderSheetOptions() {
   const slot = sheetState.slot, q = sheetState.query;
   const recent = (loadRecent()[slot] || []).map((id) => profile.menu[slot].find((o) => o.id === id)).filter(Boolean);
-  $("#recentRow").innerHTML = recent.length && !q
-    ? `<div class="recent-label">Recientes</div><div class="recent-row">${recent.map((o) => `<button class="chip-opt" data-pick="${o.id}">${esc(o.n)}</button>`).join("")}</div>`
-    : "";
-  const list = profile.menu[slot].filter((o) => dishMatches(o, q));
-  $("#sheetList").innerHTML = list.length
-    ? list.map((o) => `<button class="opt" data-pick="${o.id}"><span class="code">${o.id}</span><span>${esc(o.n)}</span><span class="kc">${o.k} kcal<br>${r0(o.p)} g P</span></button>`).join("")
-    : `<p class="empty">Sin platos que coincidan con "${esc(q)}".</p>`;
+  // Platos del plan que tocan el día abierto (los que llevan "(S1 · Lunes)" con ese día de la semana).
+  const wd = norm(current.toLocaleDateString("es-ES", { weekday: "long" }));
+  const planned = q ? [] : profile.menu[slot].filter((o) => { const tg = splitName(o.n).tag; return tg && norm(tg).endsWith(wd); });
+  const optHTML = (o) => `<button class="opt" data-pick="${o.id}"><span class="code">${o.id}</span><span>${nameHTML(o.n)}</span><span class="kc">${o.k} kcal<br>${r0(o.p)} g P</span></button>`;
+  $("#recentRow").innerHTML = (planned.length ? `<div class="recent-label">Toca hoy en el plan</div><div class="plan-list">${planned.map(optHTML).join("")}</div>` : "")
+    + (recent.length && !q ? `<div class="recent-label">Recientes</div><div class="recent-row">${recent.map((o) => `<button class="chip-opt" data-pick="${o.id}">${esc(splitName(o.n).t)} <small>${o.k}</small></button>`).join("")}</div>` : "");
+  const list = profile.menu[slot].filter((o) => dishMatches(o, q) && !planned.includes(o));
+  $("#sheetList").innerHTML = (list.length && (planned.length || recent.length) && !q ? `<div class="recent-label">Todos</div>` : "")
+    + (list.length ? list.map(optHTML).join("") : `<p class="empty">Sin platos que coincidan con "${esc(q)}".</p>`);
 }
 function openPortionStep(dishId) {
   const o = byId(dishId);
-  $("#sheetTitle").textContent = o.n;
+  $("#sheetTitle").textContent = splitName(o.n).t;
   $("#sheetBody").innerHTML = `
     <button class="back-link" id="portionBack" type="button">‹ Elegir otro plato</button>
     <div class="portion-card">
       <p class="muted">¿Qué ración quieres registrar?</p>
       <div class="portion-row">
         ${PORTIONS.map((pt) => `<button class="portion-btn${pt.mult === 1 ? " is-default" : ""}" data-portion="${pt.mult}" data-dish="${o.id}">
-          <b>${pt.label}×</b><span>${r0(o.k * pt.mult)} kcal · ${r1(o.p * pt.mult)} g P</span></button>`).join("")}
+          <b>${pt.label}×</b><span>${r0(o.k * pt.mult)} kcal · ${f1(o.p * pt.mult)} g P</span></button>`).join("")}
       </div>
       <button class="btn ghost" type="button" data-ed-logdish="${o.id}">✎ Cambiar ingredientes solo para hoy</button>
     </div>`;
@@ -389,7 +391,7 @@ function itemDishCost(x) {
 
 /* ---------- MENÚ ---------- */
 function cardHTML(o, addable = true) {
-  return `<article class="card"><h3><span class="code">${o.id}</span>${o.n}${o.mod ? `<span class="mod-tag">modificado</span>` : ""}</h3>
+  return `<article class="card"><h3><span class="code">${o.id}</span><span>${nameHTML(o.n)}</span>${o.mod ? `<span class="mod-tag">modificado</span>` : ""}</h3>
     <ul>${o.i.map((x) => `<li>${x}</li>`).join("")}</ul>
     ${o.t ? `<p class="tip">${o.t}</p>` : ""}
     <div class="macros"><span><b>${o.k}</b> kcal</span><span>P <b>${r0(o.p)}</b></span><span>C ${r0(o.c)}</span><span>G ${r0(o.f)}</span>${costLabel(dishCost(o)) ? `<span class="cost">${costLabel(dishCost(o))}</span>` : ""}
@@ -437,14 +439,14 @@ function updBuilder() {
 let ed = null;
 const fmtG = (g) => String(Math.round(g)).replace(".", ",");
 const addM = (a, b, sign = 1) => ({ k: a.k + sign * b.k, p: a.p + sign * b.p, c: a.c + sign * b.c, f: a.f + sign * b.f });
-function macrosTxt(m) { return `${r0(m.k)} kcal · P ${r1(m.p)} · C ${r0(m.c)} · G ${r0(m.f)}`; }
+function macrosTxt(m) { return `${r0(m.k)} kcal · P ${f1(m.p)} · C ${r0(m.c)} · G ${r0(m.f)}`; }
 function bandStatus(slotId, m) {
   const t = (profile.slots.find((s) => s.id === slotId) || {}).target;
   if (!t) return "";
   const out = [];
   const dk = m.k - t.k;
   if (Math.abs(dk) > 15) out.push(`${dk > 0 ? "+" : ""}${r0(dk)} kcal`);
-  if (t.p != null) { const dp = m.p - t.p; if (Math.abs(dp) > 3) out.push(`${dp > 0 ? "+" : ""}${r1(dp)} g P`); }
+  if (t.p != null) { const dp = m.p - t.p; if (Math.abs(dp) > 3) out.push(`${dp > 0 ? "+" : ""}${f1(dp)} g P`); }
   else if (m.p < t.pMin || m.p > t.pMax) out.push(`proteína fuera de ${t.pMin}–${t.pMax} g`);
   return out.length ? `<p class="band off">Fuera de la franja (${t.k} kcal): ${out.join(", ")}</p>` : `<p class="band ok">Dentro de la franja ✓</p>`;
 }
@@ -482,7 +484,7 @@ function renderEditor() {
   const showOrig = !free && (changed || (ed.mode === "dish" && byId(ed.id).mod));
   const actions = {
     dish: `<button class="btn" data-ed-save="1">Guardar plato</button>${byId(ed.id || "") && byId(ed.id).mod ? `<button class="btn ghost" data-ed-reset="1">Restaurar original</button>` : ""}`,
-    log: `<div class="portion-row">${PORTIONS.map((pt) => `<button class="portion-btn${pt.mult === 1 ? " is-default" : ""}" data-ed-log="${pt.mult}"><b>${pt.label}×</b><span>${r0(ed.m.k * pt.mult)} kcal · ${r1(ed.m.p * pt.mult)} g P</span></button>`).join("")}</div>`,
+    log: `<div class="portion-row">${PORTIONS.map((pt) => `<button class="portion-btn${pt.mult === 1 ? " is-default" : ""}" data-ed-log="${pt.mult}"><b>${pt.label}×</b><span>${r0(ed.m.k * pt.mult)} kcal · ${f1(ed.m.p * pt.mult)} g P</span></button>`).join("")}</div>`,
     free: `<button class="btn" data-ed-log="1"${ed.i.length ? "" : " disabled"}>Registrar</button>`,
     entry: `<button class="btn" data-ed-entry="1">Guardar cambios</button>`,
   }[ed.mode];
@@ -490,13 +492,13 @@ function renderEditor() {
     dish: "El cambio se guarda en este móvil y se usa al registrar, en Monta tu día, la lista de la compra y los costes. Lo ya registrado no cambia.",
     log: "Solo cambia lo que registras ahora; el plato del Menú se queda como está. Elige la ración para registrarlo.",
     free: "Añade los ingredientes con sus gramos y los macros se calculan solos.",
-    entry: `Cambia solo esta entrada del registro${ed.mult !== 1 ? ` (ración ${r1(ed.mult)}×; los valores de arriba son por ración)` : ""}.`,
+    entry: `Cambia solo esta entrada del registro${ed.mult !== 1 ? ` (ración ${f1(ed.mult)}×; los valores de arriba son por ración)` : ""}.`,
   }[ed.mode];
   $("#sheetBody").innerHTML = `
     <label for="edName">${free ? "Nombre (opcional)" : "Nombre del plato"}<input type="text" id="edName" value="${esc(ed.n)}" placeholder="${free ? "p. ej. Tostadas con pavo" : ""}" autocomplete="off"></label>
     <div class="ed-list">${ed.i.length ? ed.i.map((raw, idx) => {
       const m = ingMacros(raw);
-      return `<div class="ed-row"><div class="ed-name"><b>${esc(raw)}</b><small>${m ? `${r0(m.k)} kcal · ${r1(m.p)} g P` : "sin macros (no se puede cambiar)"}</small></div>
+      return `<div class="ed-row"><div class="ed-name"><b>${esc(raw)}</b><small>${m ? `${r0(m.k)} kcal · ${f1(m.p)} g P` : "sin macros (no se puede cambiar)"}</small></div>
         ${m ? `<button class="chip-opt" data-ed-change="${idx}">Cambiar</button><button class="del" data-ed-remove="${idx}" aria-label="Quitar ${esc(raw)}">✕</button>` : ""}</div>`;
     }).join("") : `<p class="empty">Aún no hay ingredientes.</p>`}</div>
     <button class="btn ghost" data-ed-add="1">＋ Añadir ingrediente</button>
@@ -571,7 +573,7 @@ function renderPickerOptions() {
   const q = norm(ed.q || "");
   const list = foodOptions().filter((o) => !q || norm(o.label).includes(q) || norm(o.cooked ? o.c.cooked.w : o.c.w || "").includes(q));
   $("#edOptions").innerHTML = list.length
-    ? list.map((o) => `<button class="opt" data-ed-pick="${o.id}"><span>${esc(o.label)}</span><span class="kc">${r0(o.nut[0])} kcal<br>${r1(o.nut[1])} g P</span></button>`).join("")
+    ? list.map((o) => `<button class="opt" data-ed-pick="${o.id}"><span>${esc(o.label)}</span><span class="kc">${r0(o.nut[0])} kcal<br>${f1(o.nut[1])} g P</span></button>`).join("")
     : `<p class="empty">Nada con "${esc(ed.q)}". Créalo abajo con sus macros.</p>`;
 }
 function openGrams(optId) {
@@ -583,7 +585,7 @@ function openGrams(optId) {
   $("#sheetBody").innerHTML = `
     <button class="back-link" type="button" data-ed-back-pick="1">‹ Elegir otro ingrediente</button>
     <div class="portion-card">
-      <p><b>${esc(o.label)}</b> <span class="muted small">(${r0(o.nut[0])} kcal · ${r1(o.nut[1])} g P por 100 g)</span></p>
+      <p><b>${esc(o.label)}</b> <span class="muted small">(${r0(o.nut[0])} kcal · ${f1(o.nut[1])} g P por 100 g)</span></p>
       <label for="edGrams">Gramos${o.c.g ? ` (1 unidad ≈ ${o.c.g} g)` : ""}<input type="text" inputmode="decimal" id="edGrams" value="${fmtG(ed.grams)}"></label>
       <div id="edPreview"></div>
       <div class="row">
@@ -596,7 +598,7 @@ function openGrams(optId) {
 }
 function pickText() {
   const o = ed.pick, w = o.cooked ? o.c.cooked.w : o.c.w;
-  const units = o.c.g && o.c.u === "ud" ? ` (≈${r1(ed.grams / o.c.g).toString().replace(".", ",")} ud)` : "";
+  const units = o.c.g && o.c.u === "ud" ? ` (≈${f1(ed.grams / o.c.g).toString().replace(".", ",")} ud)` : "";
   return `${fmtG(ed.grams)} g de ${w}${units}`;
 }
 function pickDelta() {
@@ -607,7 +609,7 @@ function pickDelta() {
 function renderGramsPreview() {
   const d = ed.grams > 0 ? pickDelta() : null;
   $("#edPreview").innerHTML = d ? `
-    <p class="muted small">Este ingrediente: ${r0(d.newM.k)} kcal · ${r1(d.newM.p)} g P${ed.idx != null ? ` (antes ${r0(d.oldM.k)} kcal · ${r1(d.oldM.p)} g P)` : ""}</p>
+    <p class="muted small">Este ingrediente: ${r0(d.newM.k)} kcal · ${f1(d.newM.p)} g P${ed.idx != null ? ` (antes ${r0(d.oldM.k)} kcal · ${f1(d.oldM.p)} g P)` : ""}</p>
     <p class="ed-sum">Plato: <b>${macrosTxt(d.total)}</b></p>${bandStatus(ed.slot, d.total)}` : `<p class="empty">Pon los gramos.</p>`;
 }
 function applyPick() {
@@ -677,7 +679,7 @@ function renderSemana() {
   const fmt = (d, o) => d.toLocaleDateString("es-ES", o);
   const thisWeek = iso(startOfWeek(new Date())) === iso(weekStart);
   $("#weekTitle").textContent = thisWeek ? "Esta semana" : `${fmt(dates[0], { day: "numeric", month: "short" })} – ${fmt(dates[6], { day: "numeric", month: "short" })}`;
-  $("#weekSub").textContent = `Domingo ${fmt(dates[0], { day: "numeric", month: "long" })} a sábado ${fmt(dates[6], { day: "numeric", month: "long" })}`;
+  $("#weekSub").textContent = `${fmt(dates[0], { day: "numeric", month: "short" })} – ${fmt(dates[6], { day: "numeric", month: "short" })} · de domingo a sábado`;
 
   const weights = loadWeights();
   const rows = dates.map((d) => {
@@ -694,18 +696,17 @@ function renderSemana() {
   const wPrev = avg(weekDates(prevStart).map((d) => weights[iso(d)]).filter((x) => x != null));
   const cost = rows.reduce((a, r) => ({ eur: a.eur + r.cost.eur, missing: a.missing + r.cost.missing, priced: a.priced + r.cost.priced }), { eur: 0, missing: 0, priced: 0 });
 
-  $("#weekSummary").innerHTML = logged.length ? `
-    <div class="big"><strong>${r0(kAvg)}</strong><span>kcal de media · objetivo medio ${r0(tAvg)} (${logged.length} ${logged.length === 1 ? "día registrado" : "días registrados"})</span></div>
-    ${meter("Calorías (media)", kAvg, r0(tAvg), "kcal")}
-    ${meter("Proteína (media)", pAvg, profile.proteinTarget, "g")}
-    <div class="chips">
-      <span class="chip">${r0(kAvg - tAvg) > 0 ? "+" : ""}${r0(kAvg - tAvg)} kcal/día vs objetivo</span>
-      <span class="chip">Balance semana ${r0((kAvg - tAvg) * logged.length) > 0 ? "+" : ""}${r0((kAvg - tAvg) * logged.length)} kcal</span>
-      ${stepsAvg != null ? `<span class="chip">${r0(stepsAvg).toLocaleString("es-ES")} pasos/día</span>` : ""}
-      ${wAvg != null ? `<span class="chip">Peso medio ${kgFmt(wAvg)} kg${wPrev != null ? ` (${wAvg - wPrev > 0 ? "+" : ""}${kgFmt(wAvg - wPrev)})` : ""}</span>` : ""}
-      ${cost.priced ? `<span class="chip">Coste ${costLabel(cost)}</span>` : ""}
-    </div>`
-    : `<p class="empty">No hay comidas registradas en esta semana.</p>${wAvg != null ? `<div class="chips"><span class="chip">Peso medio ${kgFmt(wAvg)} kg</span></div>` : ""}`;
+  const sign = (x) => (x > 0 ? "+" : "") + x;
+  const tile = (label, val, sub, cls = "") => `<div class="tile ${cls}"><small>${label}</small><b>${val}</b>${sub ? `<span>${sub}</span>` : ""}</div>`;
+  $("#weekSummary").innerHTML = `
+    <div class="tiles">
+      ${tile("Kcal media", kAvg != null ? r0(kAvg) : "—", kAvg != null ? `objetivo ${r0(tAvg)} · ${sign(r0(kAvg - tAvg))}` : "sin registros", kAvg != null && kAvg > tAvg * 1.03 ? "warn" : "")}
+      ${tile("Proteína media", pAvg != null ? `${r0(pAvg)} g` : "—", `objetivo ${profile.proteinTarget} g`, pAvg != null && pAvg < profile.proteinTarget * 0.9 ? "warn" : "")}
+      ${tile("Pasos / día", stepsAvg != null ? r0(stepsAvg).toLocaleString("es-ES") : "—", stepsAvg != null ? "" : "sin datos")}
+      ${tile("Peso medio", wAvg != null ? `${kgFmt(wAvg)} kg` : "—", wAvg != null && wPrev != null ? `${wAvg - wPrev > 0 ? "+" : ""}${kgFmt(wAvg - wPrev)} vs semana anterior` : "")}
+    </div>
+    ${weekChart(rows)}
+    ${logged.length ? `<p class="mini-row"><span>Balance <b>${sign(r0((kAvg - tAvg) * logged.length))} kcal</b> en ${logged.length} ${logged.length === 1 ? "día" : "días"}</span>${cost.priced ? `<span>Coste <b>${costLabel(cost)}</b></span>` : ""}</p>` : ""}`;
 
   const todayKey = iso(new Date());
   $("#weekDays").innerHTML = rows.map((r) => {
@@ -724,6 +725,26 @@ function renderSemana() {
   renderWeight();
   renderShop(rows);
   renderPrices();
+}
+
+// Barras de kcal por día con la marca del objetivo de cada día (SVG, sin librerías).
+function weekChart(rows) {
+  if (!rows.some((r) => r.items.length)) return "";
+  const W = 340, H = 120, B = 18, T = 8, gap = 10, bw = (W - gap * 8) / 7;
+  const max = Math.max(...rows.map((r) => Math.max(r.t.k, r.target || 0)), 1) * 1.08;
+  const y = (v) => T + (1 - v / max) * (H - T - B);
+  const todayKey = iso(new Date());
+  return `<svg class="wkchart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Kcal de cada día frente a su objetivo">
+    ${rows.map((r, i) => {
+      const x = gap + i * (bw + gap);
+      const lbl = r.d.toLocaleDateString("es-ES", { weekday: "narrow" }).toUpperCase();
+      const over = r.target && r.t.k > r.target * 1.03;
+      return `<g>
+        ${r.items.length ? `<rect x="${x}" y="${y(r.t.k)}" width="${bw}" height="${H - B - y(r.t.k)}" rx="4" class="${over ? "over" : "ok"}"><title>${lbl}: ${r0(r.t.k)} / ${r0(r.target)} kcal</title></rect>` : `<rect x="${x}" y="${H - B - 2}" width="${bw}" height="2" class="none"/>`}
+        ${r.target && r.items.length ? `<line x1="${x - 2}" x2="${x + bw + 2}" y1="${y(r.target)}" y2="${y(r.target)}" class="tgt"/>` : ""}
+        <text x="${x + bw / 2}" y="${H - 4}" text-anchor="middle" class="${r.key === todayKey ? "today" : ""}">${lbl}</text></g>`;
+    }).join("")}
+  </svg>`;
 }
 
 /* peso */
@@ -1304,7 +1325,7 @@ function renderHealthStatus() {
     const today = iso(new Date()), y = new Date(); y.setDate(y.getDate() - 1);
     when = iso(d) === today ? `hoy a las ${hm}` : iso(d) === iso(y) ? `ayer a las ${hm}` : d.toLocaleDateString("es-ES", { day: "numeric", month: "short" }) + ` a las ${hm}`;
   }
-  el.textContent = `Fitbit: última actualización ${when}.${stale ? " Toca ⟳ Fitbit para actualizar." : ""}`;
+  el.textContent = `Fitbit: ${when === "nunca" ? "sin actualizar" : "actualizado " + when}${stale && when !== "nunca" ? " · toca ⟳ para actualizar" : ""}`;
   el.hidden = false;
 }
 let healthAutoBusy = false;
@@ -1356,7 +1377,7 @@ $("#healthWeek").addEventListener("click", () => {
   runHealthSync(weekStart, to, () => renderSemana());
 });
 
-const APP_VERSION = "v13"; // igual que CACHE en sw.js
+const APP_VERSION = "v14"; // igual que CACHE en sw.js
 $("#appVersion").textContent = "Versión de la app: " + APP_VERSION;
 
 /* arranque */

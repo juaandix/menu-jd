@@ -39,7 +39,8 @@
       <div class="summary" id="summary"></div>
       <div class="steps-row">
         <div class="steps-line">
-          <label for="stepsIn">Pasos del día<input type="text" id="stepsIn" inputmode="numeric" pattern="[0-9.]*" placeholder="p. ej. 12000" autocomplete="off"></label>
+          <label for="stepsIn" class="steps-label">Pasos</label>
+          <input type="text" id="stepsIn" inputmode="numeric" pattern="[0-9.]*" placeholder="p. ej. 12000" autocomplete="off">
           <button class="btn ghost" id="healthDay" type="button" hidden>⟳ Fitbit</button>
         </div>
         <p class="muted small" id="stepsInfo"></p>
@@ -160,10 +161,10 @@
   </main>
 
   <nav class="tabbar" aria-label="Secciones">
-    <button data-view="hoy" class="active"><span class="ti">●</span>Hoy</button>
-    <button data-view="menu"><span class="ti">☰</span>Menú</button>
-    <button data-view="semana"><span class="ti">▦</span>Semana</button>
-    <button data-view="recetas"><span class="ti">✎</span>Recetas</button>
+    <button data-view="hoy" class="active"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="4.5" width="17" height="16" rx="3"/><path d="M3.5 9.5h17M8 2.5v4M16 2.5v4"/><circle cx="12" cy="15" r="2" class="fill"/></svg>Hoy</button>
+    <button data-view="menu"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r="1.2" class="fill"/><circle cx="4.5" cy="12" r="1.2" class="fill"/><circle cx="4.5" cy="18" r="1.2" class="fill"/></svg>Menú</button>
+    <button data-view="semana"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 20.5h17"/><rect x="5" y="11" width="3" height="7" rx="1"/><rect x="10.5" y="6" width="3" height="12" rx="1"/><rect x="16" y="9" width="3" height="9" rx="1"/></svg>Semana</button>
+    <button data-view="recetas"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4.5A1.5 1.5 0 0 1 6.5 3H19v15H6.5A1.5 1.5 0 0 0 5 19.5z"/><path d="M5 19.5A1.5 1.5 0 0 0 6.5 21H19v-3"/><path d="M9 7.5h6M9 11h4"/></svg>Recetas</button>
   </nav>
 
   <!-- Hoja para añadir -->

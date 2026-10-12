@@ -174,6 +174,12 @@ Probar a 390×844, añadir platos, recargar y comprobar que el registro persiste
 - Entradas del registro con ingredientes propios guardan `i` (por 1 ración) y `m`; la compra y el coste usan `x.i` antes que el plato de `ref`.
 - En Hoy, tocar una entrada abre su hoja: cambiar ración (recalcula desde los valores por ración = k/m), mover a otra franja, duplicar, ✎ ingredientes y borrar. Borrar (también con ✕) muestra un aviso con "Deshacer" (6 s).
 
+## Interfaz
+- Tema oscuro fijo por perfil (azul JD, violeta Cristina), decidido por el usuario: no seguir el modo claro del sistema.
+- Números mostrados con coma decimal: `f1()` para mostrar, `r1()` solo para guardar/calcular.
+- Nombres con "(S1 · Lunes)": `splitName()`/`nameHTML()` muestran la etiqueta aparte. En la hoja de añadir, "Toca hoy en el plan" lista los platos cuyo día de la etiqueta coincide con el día abierto (Cristina).
+- Hoy: resumen compacto (kcal restantes, proteína que falta, barras, carbohidratos/grasa/coste en una línea), subtotal por franja, pasos en una línea. Semana: 4 fichas + gráfica SVG de barras (kcal vs objetivo por día). Iconos SVG en la barra inferior.
+
 ## Ideas pendientes (no implementadas)
 - Sincronización entre dispositivos con backend Spring Boot + PostgreSQL.
 - Integración con Hevy (solo exporta tipo de entreno, duración y kcal estimadas).
