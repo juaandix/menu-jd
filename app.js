@@ -784,25 +784,24 @@ const HEALTH_SCOPES = {
 function healthTokKey() { return `menujd.ghealth.tok.${profile.id}.v2`; }
 function healthToken() { try { return JSON.parse(sessionStorage.getItem(healthTokKey())); } catch { return null; } }
 function clearHealthToken() { try { sessionStorage.removeItem(healthTokKey()); } catch {} }
-async function ensureHealthToken() {
+// onlySteps: pide solo el permiso de pasos (reintento si Google rechaza el conjunto con DISALLOWED_OAUTH_SCOPES).
+async function ensureHealthToken(onlySteps = false) {
   const tok = healthToken();
-  if (tok && tok.exp > Date.now() + 30000) return tok;
+  if (!onlySteps && tok && tok.exp > Date.now() + 30000) return tok;
   const cfg = gcalCfg();
   if (!cfg.clientId) throw new Error("Configura primero el Client ID en Recetas → Google.");
   await loadGIS();
   return new Promise((resolve, reject) => {
     const client = google.accounts.oauth2.initTokenClient({
       client_id: cfg.clientId,
-      scope: Object.values(HEALTH_SCOPES).join(" "),
+      scope: onlySteps ? HEALTH_SCOPES.steps : Object.values(HEALTH_SCOPES).join(" "),
       // Sin mezclar permisos ya concedidos (calendario): la Health API rechaza tokens con scopes ajenos (403 DISALLOWED_OAUTH_SCOPES).
       include_granted_scopes: false,
       callback: (resp) => {
         if (resp.error) return reject(new Error(resp.error === "access_denied" ? "Google denegó el acceso (¿tu cuenta está en usuarios de prueba?)" : resp.error));
         const has = (s) => google.accounts.oauth2.hasGrantedAllScopes(resp, s);
-        const extra = String(resp.scope || "").split(" ").filter((x) => x && !x.includes("googlehealth"));
-        if (extra.length) console.warn("Token de Google Health con permisos ajenos:", extra);
         if (!has(HEALTH_SCOPES.steps)) return reject(new Error("Sin permiso para leer los pasos: márcalo al conectar."));
-        const t = { token: resp.access_token, exp: Date.now() + resp.expires_in * 1000, weight: has(HEALTH_SCOPES.weight) };
+        const t = { token: resp.access_token, exp: Date.now() + resp.expires_in * 1000, weight: !onlySteps && has(HEALTH_SCOPES.weight), scope: String(resp.scope || "") };
         try { sessionStorage.setItem(healthTokKey(), JSON.stringify(t)); } catch {}
         resolve(t);
       },
@@ -824,12 +823,15 @@ async function healthFetch(tok, path, body) {
     let why = "";
     try {
       const e = (await res.json()).error || {};
-      const reason = (e.details || []).map((d) => d.reason).filter(Boolean)[0];
-      why = [reason || e.status, e.message].filter(Boolean).join(" · ");
+      const info = (e.details || []).find((d) => d.reason) || {};
+      const meta = info.metadata ? Object.entries(info.metadata).map(([k, v]) => `${k}=${v}`).join(", ") : "";
+      why = [info.reason || e.status, e.message, meta].filter(Boolean).join(" · ");
     } catch {}
     if (res.status === 403 && /SERVICE_DISABLED|has not been used|is disabled/i.test(why)) throw new Error("La Google Health API no está habilitada en tu proyecto de Google Cloud. " + why);
     if (res.status === 403 && /SCOPE_INSUFFICIENT|insufficient/i.test(why)) { clearHealthToken(); throw new Error("Falta un permiso de Google Health: vuelve a pulsar y márcalo. " + why); }
-    throw new Error(`Google Health: error ${res.status}${why ? " · " + why : ""}`);
+    const err = new Error(`Google Health: error ${res.status}${why ? " · " + why : ""}`);
+    err.reason = why;
+    throw err;
   }
   return res.json();
 }
@@ -881,8 +883,17 @@ async function syncHealth(from, to) {
   const start = new Date(from); start.setHours(0, 0, 0, 0);
   const end = new Date(to); end.setHours(0, 0, 0, 0);
   if (end <= start) throw new Error("No hay datos de días futuros.");
-  const tok = await ensureHealthToken();
-  const steps = await healthSteps(tok, start, end);
+  let tok = await ensureHealthToken();
+  let steps;
+  try { steps = await healthSteps(tok, start, end); }
+  catch (err) {
+    if (!/DISALLOWED_OAUTH_SCOPES/.test(err.reason || "")) throw err;
+    // Reintento con solo el permiso de pasos; si también falla, se enseñan los permisos que llevaba el token.
+    clearHealthToken();
+    tok = await ensureHealthToken(true);
+    try { steps = await healthSteps(tok, start, end); }
+    catch (err2) { err2.message += " · Permisos del token: " + (tok.scope.replace(/https:\/\/www\.googleapis\.com\/auth\//g, "") || "(ninguno)"); throw err2; }
+  }
   Object.entries(steps).forEach(([key, n]) => { getDay(key).steps = n; });
   saveAll(db);
   let weights = {};
@@ -902,7 +913,7 @@ async function runHealthSync(from, to, onDone) {
     if (!nS && !nW) toast("Google Health no tiene datos de esos días");
     else toast(`Fitbit: ${nS} ${nS === 1 ? "día" : "días"} de pasos${nW ? `, ${nW} ${nW === 1 ? "peso" : "pesos"}` : ""}`);
   } catch (err) {
-    toast(err.message || "No se pudo sincronizar con Google Health", 9000);
+    toast(err.message || "No se pudo sincronizar con Google Health", 15000);
   }
 }
 $("#healthDay").addEventListener("click", () => {
@@ -917,6 +928,9 @@ $("#healthWeek").addEventListener("click", () => {
   const to = new Date(weekStart); to.setDate(to.getDate() + 7);
   runHealthSync(weekStart, to, () => renderSemana());
 });
+
+const APP_VERSION = "v8"; // igual que CACHE en sw.js
+$("#appVersion").textContent = "Versión de la app: " + APP_VERSION;
 
 /* arranque */
 renderProfileSelect();
