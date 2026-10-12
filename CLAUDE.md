@@ -5,8 +5,8 @@ Debe funcionar en Android e iOS, instalable desde el navegador y sin conexión.
 Idioma de la interfaz y del código de cara al usuario: español de España.
 
 ## Arquitectura multi-perfil
-- Todo vive en `data.js` bajo `const PROFILES = { jd: {...}, cristina: {...} }`. Cada perfil tiene: `id`, `label`, `proteinTarget`, `gymDays`, `dayTypes`, `slots`, `menu`, `recipes`, `notes`, y opcionalmente `defaultType(date)`, `builder`, `calendar`.
-- Selector de perfil fijo arriba de la app (`#profileSelect`, fuera de las tres vistas). Al cambiar de perfil se recarga el registro, el menú y las recetas; cada perfil usa su propio `localStorage["menujd.log.<id>.v1"]`, así que nunca se mezclan datos entre perfiles.
+- Todo vive en `data.js` bajo `const PROFILES = { jd: {...}, cristina: {...} }`. Cada perfil tiene: `id`, `label`, `proteinTarget`, `gymDays`, `dayTypes`, `slots`, `menu`, `recipes`, `notes`, `weight` (kg de referencia), y opcionalmente `weightGoal`, `defaultType(date)`, `builder`, `calendar`. Cada tipo de día puede llevar `steps` (pasos que ya incluye su objetivo de kcal).
+- Selector de perfil fijo arriba de la app (`#profileSelect`, fuera de las vistas). Al cambiar de perfil se recarga el registro, el menú y las recetas; cada perfil usa su propio `localStorage["menujd.log.<id>.v1"]`, así que nunca se mezclan datos entre perfiles.
 - `builder` (opcional): `{ main: ["D","C","N"], snackSlot: "S" }`. Solo lo define JD — habilita la sección "Monta tu día" en Menú; si un perfil no lo define, esa sección se oculta.
 - `calendar` (opcional): `{ enabled: true }`. Solo lo define JD — habilita el botón 📅 de Google Calendar en Hoy; si un perfil no lo define, el botón y la sección de ajustes de calendario en Recetas se ocultan.
 - `defaultType(date)` (opcional): tipo de día propuesto para una fecha sin registro aún. Si no se define, se usa `dayTypes[0].id`.
@@ -108,14 +108,14 @@ tarta de queso (1/6)    166  14.9   5.3  8.1   # por porción
 - HTML + CSS + JavaScript vanilla, sin build ni dependencias. Mantenerlo así salvo que el usuario pida migrar (su stack habitual: React, Java 17/Spring Boot, PostgreSQL, Docker).
 - Sin fuentes ni recursos externos (todo debe funcionar offline), **excepto** la integración opcional con Google Calendar (ver abajo, solo perfil JD): esa sí carga un script externo, pero solo bajo demanda al pulsar el botón correspondiente, nunca en el arranque.
 - Archivos:
-  - `index.html`: selector de perfil (`#profileSelect`) fuera de las vistas, tres vistas (`#view-hoy`, `#view-menu`, `#view-recetas`), tab bar inferior, hoja modal para añadir, toast.
+  - `index.html`: selector de perfil (`#profileSelect`) fuera de las vistas, cuatro vistas (`#view-hoy`, `#view-menu`, `#view-semana`, `#view-recetas`), tab bar inferior de 4 pestañas, hoja modal para añadir, toast.
   - `styles.css`: tokens en `:root`, modo oscuro con `prefers-color-scheme`, safe areas (`env(safe-area-inset-*)`), regla `[hidden]{display:none!important}` (necesaria: `.sheet` usa display:grid, `.builder`/`.profile-bar` dependen de ella para ocultarse).
   - `data.js`: `const PROFILES = { jd, cristina }` — ver "Arquitectura multi-perfil" arriba. Cada plato: `{id, n, i:[ingredientes], k, p, c, f, t?}`.
   - `app.js`: `profile` = perfil activo (variable reasignada por `switchProfile()`); render de vistas, registro, calculadora, export/import JSON, registro del service worker, integración con Google Calendar. No quedan constantes globales tipo `MENU`/`DAY_TYPES`: todo cuelga de `profile.*`.
   - `sw.js`: caché `menujd-vN`, estrategia red primero con fallback a caché para peticiones del propio origen. Subir N en cada despliegue. Las peticiones a otros orígenes (Google) se dejan pasar sin interceptar ni cachear.
   - `manifest.webmanifest` + `icons/` (192, 512, maskable 512, apple-touch-icon 180).
 - Persistencia, con clave por perfil: `localStorage["menujd.log.<profileId>.v1"]` =
-  `{ "YYYY-MM-DD": { type: "trabajo-gym", items: [{ slot:"D|C|N|S", ref?:"D4", n, k, p, c, f }] } }`.
+  `{ "YYYY-MM-DD": { type: "trabajo-gym", steps?: 12000, items: [{ slot:"D|C|N|S", ref?:"D4", m?: 1.5, n, k, p, c, f }] } }`.
   Perfil activo en `localStorage["menujd.profile.v1"]`. El registro antiguo de antes de los perfiles (`menujd.log.v1`) se migra automáticamente a `menujd.log.jd.v1` la primera vez que carga `app.js`.
 
 ## Integración opcional con Google Calendar
@@ -138,10 +138,16 @@ python3 -m http.server 8080   # http://localhost:8080
 ```
 Probar a 390×844, añadir platos, recargar y comprobar que el registro persiste y que no hay errores en consola.
 
+## Semana, peso, pasos, compra y costes
+- **Pasos** (vista Hoy, campo `steps` del día): si el tipo de día tiene `steps` (JD: los de trabajo = 15.000), el objetivo de kcal se ajusta con `(pasos − referencia) × 0,0004 × kg` (≈0,035 kcal/paso a 87 kg), redondeado a 10 y limitado a ±400. Sin `steps` en el tipo de día solo se informa. kg = último peso registrado hasta esa fecha, o `profile.weight`.
+- **Vista Semana** (domingo–sábado): media de kcal/proteína vs objetivo (con ajuste por pasos), balance semanal, pasos medios, peso medio vs semana anterior, coste; una fila por día que abre ese día en Hoy.
+- **Peso**: `localStorage["menujd.weight.<id>.v1"] = { "YYYY-MM-DD": 86.4 }`; gráfica SVG de los últimos 60 registros con línea de `weightGoal`.
+- **Lista de la compra**: suma los ingredientes de los platos registrados en la semana (× ración). Los ingredientes son texto libre: `parseIng()` en `app.js` saca la cantidad y los asigna al catálogo `SHOP` de `data.js` (compartido entre perfiles, la primera regex que coincide gana, así que el orden importa). Pasta/arroz/pollo cocidos se pasan a seco/crudo (factores de las notas: ÷2,5, ÷2,6, ×1,3). Al añadir platos con ingredientes nuevos, comprobar que caen en la entrada correcta del catálogo. Marcas por semana en `menujd.shopcheck.<id>.v1`.
+- **Precios**: los introduce el usuario (€/kg, €/l o €/ud) en Semana → Precios; `localStorage["menujd.prices.v1"]`, comunes a todos los perfiles. No hay precios por defecto (no inventarlos). Coste de plato/día/semana/lista = suma de lo que tenga precio; "≥" si falta alguno.
+- Las entradas nuevas del registro guardan `m` (ración); en las antiguas se deduce de las kcal.
+- "Monta tu día" añade el plan al día abierto en Hoy (no siempre a hoy), para poder planificar días futuros.
+- Copia de seguridad v2: `{ app:"menujd", version:2, profile, log, weight, prices }`; la importación acepta también el formato antiguo (objeto de días).
+
 ## Ideas pendientes (no implementadas)
-- Coste por plato y por día (precios Mercadona).
-- Lista de la compra semanal generada a partir de los platos elegidos.
-- Historial semanal (media de kcal y proteína domingo–sábado) y gráfica de peso.
-- Registro de pasos reales para ajustar el objetivo del día.
 - Sincronización entre dispositivos con backend Spring Boot + PostgreSQL.
 - Integración con Google Health / Hevy (Hevy solo exporta tipo de entreno, duración y kcal estimadas).

@@ -3,12 +3,16 @@
 // defaultType(date): tipo de día propuesto cuando no hay registro aún para esa fecha.
 // builder opcional {main:[...], snackSlot}: habilita "Monta tu día" en la vista Menú.
 // calendar opcional {enabled:true}: habilita el botón de detección por Google Calendar en Hoy.
+// weight: kg de referencia (cálculo de pasos si no hay pesos registrados); weightGoal opcional (línea en la gráfica).
+// dayTypes[].steps opcional: pasos que ya incluye ese objetivo de kcal; si se registran pasos reales, se ajusta.
 
 const PROFILES = {
   jd: {
     id: "jd",
     label: "Juan David",
     proteinTarget: 160,
+    weight: 87, // kg de referencia si aún no hay pesos registrados (cálculo de pasos)
+    weightGoal: 80,
     gymDays: [1, 2, 4, 5], // lunes, martes, jueves, viernes (0 = domingo)
     defaultType(date) {
       return this.gymDays.includes(date.getDay()) ? "trabajo-gym" : "trabajo";
@@ -16,8 +20,8 @@ const PROFILES = {
     builder: { main: ["D", "C", "N"], snackSlot: "S" },
     calendar: { enabled: true },
     dayTypes: [
-      { id: "trabajo-gym", label: "Trabajo + gym", kcal: 2500, mods: 3 },
-      { id: "trabajo", label: "Trabajo sin gym", kcal: 2325, mods: 2 },
+      { id: "trabajo-gym", label: "Trabajo + gym", kcal: 2500, mods: 3, steps: 15000 },
+      { id: "trabajo", label: "Trabajo sin gym", kcal: 2325, mods: 2, steps: 15000 },
       { id: "libre-gym", label: "Libre + gym", kcal: 2400, mods: 3 },
       { id: "libre", label: "Libre sin gym", kcal: 2300, mods: 2 },
     ],
@@ -90,6 +94,7 @@ const PROFILES = {
     // Objetivo orientativo = media real de los 70 platos del plan de su dietista (Lorena González),
     // no una fórmula de mantenimiento: así la barra de progreso cuadra si sigue el plan tal cual.
     proteinTarget: 111,
+    weight: 75,
     gymDays: [],
     defaultType() { return "estandar"; },
     calendar: null,
@@ -200,3 +205,75 @@ const PROFILES = {
     ],
   },
 };
+
+// Catálogo de la compra, compartido por todos los perfiles. Cada ingrediente de un plato (texto libre)
+// se asigna a la primera entrada cuyo `re` coincida (texto en minúsculas y sin tildes), así que el orden importa.
+// u: unidad de compra y de precio ("g" → €/kg, "ml" → €/l, "ud" → €/unidad).
+// g: gramos por unidad (para pasar de "2 burgers" a gramos o de "100 g de plátano" a piezas).
+// dens: g por ml (para pasar gramos a ml). cooked: factor cocinado → crudo/seco cuando el texto dice cocido.
+const SHOP = [
+  { key: "aceite", n: "Aceite de oliva", u: "ml", dens: 0.92, re: /aceite|aove/, cat: "Despensa" },
+  { key: "clear", n: "Clear Whey", u: "g", re: /clear whey/, cat: "Despensa" },
+  { key: "whey", n: "Proteína en polvo (whey)", u: "g", g: 30, re: /scoop|whey|de proteina$/, cat: "Despensa" },
+  { key: "postre", n: "Postre +Proteínas", u: "ud", g: 120, re: /postre/, cat: "Lácteos" },
+  { key: "tarta", n: "Tarta de queso casera (porción)", u: "ud", re: /tarta|porcion/, cat: "Caseros" },
+  { key: "muffin", n: "Muffins caseros", u: "ud", re: /muffin/, cat: "Caseros" },
+  { key: "avena", n: "Avena (copos o harina)", u: "g", re: /avena/, cat: "Despensa" },
+  { key: "leche", n: "Leche (semi/desnatada)", u: "ml", re: /leche/, cat: "Lácteos" },
+  { key: "batido", n: "Queso fresco batido 0%", u: "g", re: /queso batido|queso fresco batido/, cat: "Lácteos" },
+  { key: "burgos", n: "Queso fresco Burgos 0%", u: "g", re: /burgos|queso fresco/, cat: "Lácteos" },
+  { key: "cottage", n: "Queso cottage", u: "g", re: /cottage/, cat: "Lácteos" },
+  { key: "griego", n: "Yogur griego ligero", u: "ud", g: 125, re: /griego/, cat: "Lácteos" },
+  { key: "yogur", n: "Yogur natural / kéfir", u: "ud", g: 125, re: /yogur|kefir/, cat: "Lácteos" },
+  { key: "mozzgouda", n: "Mozzarella + gouda rallado", u: "g", re: /mozzarella\+gouda/, cat: "Lácteos" },
+  { key: "mozz", n: "Mozzarella rallada", u: "g", re: /mozzarella/, cat: "Lácteos" },
+  { key: "gouda", n: "Gouda en lonchas", u: "g", g: 20, re: /gouda/, cat: "Lácteos" },
+  { key: "jamon", n: "Jamón cocido", u: "g", re: /jamon/, cat: "Charcutería" },
+  { key: "picada", n: "Carne picada de pollo/pavo", u: "g", re: /picada/, cat: "Carne y pescado" },
+  { key: "burger", n: "Burgers de pollo", u: "g", g: 90, re: /burger|hamburguesa/, cat: "Carne y pescado" },
+  { key: "pavofresco", n: "Pechuga de pavo fresca", u: "g", re: /pavo a la plancha/, cat: "Carne y pescado" },
+  { key: "pavo", n: "Pechuga de pavo (fiambre)", u: "g", re: /pavo/, cat: "Charcutería" },
+  { key: "contramuslo", n: "Contramuslo de pollo (peso cocinado)", u: "g", re: /contramuslo/, cat: "Carne y pescado" },
+  { key: "pollo", n: "Pechuga de pollo (en crudo)", u: "g", re: /pollo/, cooked: { re: /cocid|cocinad|desmechad/, f: 1.3 }, cat: "Carne y pescado" },
+  { key: "atun", n: "Atún/bonito al natural (g escurrido)", u: "g", g: 56, re: /atun|bonito/, cat: "Despensa" },
+  { key: "merluza", n: "Merluza / pescado blanco", u: "g", re: /merluza|bacalao|pescado blanco/, cat: "Carne y pescado" },
+  { key: "sepia", n: "Sepia", u: "g", re: /sepia/, cat: "Carne y pescado" },
+  { key: "gambas", n: "Gambas", u: "g", re: /gamba/, cat: "Carne y pescado" },
+  { key: "huevo", n: "Huevos L", u: "ud", g: 60, re: /huevo/, cat: "Huevos" },
+  { key: "tortitas", n: "Tortitas de arroz", u: "ud", re: /tortitas de arroz/, cat: "Despensa" },
+  { key: "pasta", n: "Pasta (en seco)", u: "g", re: /pasta/, cooked: { re: /cocid/, f: 0.4 }, cat: "Despensa" },
+  { key: "noodles", n: "Noodles de arroz (en seco)", u: "g", re: /noodles/, cat: "Despensa" },
+  { key: "arroz", n: "Arroz (en seco)", u: "g", re: /arroz/, cooked: { re: /cocid/, f: 1 / 2.6 }, cat: "Despensa" },
+  { key: "gnocchi", n: "Gnocchi", u: "g", re: /gnocchi/, cat: "Despensa" },
+  { key: "boniato", n: "Boniato", u: "g", re: /boniato/, cat: "Fruta y verdura" },
+  { key: "patata", n: "Patata", u: "g", re: /patata/, cat: "Fruta y verdura" },
+  { key: "triturado", n: "Tomate triturado", u: "g", re: /triturado/, cat: "Despensa" },
+  { key: "base", n: "Base de pizza extrafina", u: "ud", g: 140, re: /base extrafina/, cat: "Despensa" },
+  { key: "maxi", n: "Maxi tortillas de trigo", u: "ud", g: 60, re: /maxi tortilla/, cat: "Panadería" },
+  { key: "tortilla", n: "Tortillas de trigo (fajita/wrap)", u: "ud", g: 40, re: /tortilla de trigo/, cat: "Panadería" },
+  { key: "minibocados", n: "Pan mini bocados", u: "ud", g: 20, re: /mini bocados/, cat: "Panadería" },
+  { key: "panecillo", n: "Panecillos", u: "ud", g: 45, re: /panecillo|pan de cristal/, cat: "Panadería" },
+  { key: "pan", n: "Pan (blanco o masa madre)", u: "g", re: /\bpan\b/, cat: "Panadería" },
+  { key: "fruta", n: "Fruta madura variada (piezas)", u: "ud", g: 150, re: /fruta/, cat: "Fruta y verdura" },
+  { key: "arandanos", n: "Arándanos", u: "g", re: /arandano/, cat: "Fruta y verdura" },
+  { key: "platano", n: "Plátanos", u: "ud", g: 120, re: /platano/, cat: "Fruta y verdura" },
+  { key: "papaya", n: "Papaya / melón", u: "g", re: /papaya|melon/, cat: "Fruta y verdura" },
+  { key: "melocoton", n: "Melocotones", u: "ud", g: 150, re: /melocoton/, cat: "Fruta y verdura" },
+  { key: "aguacate", n: "Aguacates", u: "ud", g: 150, re: /aguacate/, cat: "Fruta y verdura" },
+  { key: "berenjena", n: "Berenjenas", u: "ud", g: 275, re: /berenjena/, cat: "Fruta y verdura" },
+  { key: "judia", n: "Judía verde", u: "g", re: /judia/, cat: "Fruta y verdura" },
+  { key: "calabacin", n: "Calabacín", u: "g", re: /calabacin/, cat: "Fruta y verdura" },
+  { key: "zanahoria", n: "Zanahoria / calabaza", u: "g", re: /zanahoria|calabaza/, cat: "Fruta y verdura" },
+  { key: "esparragos", n: "Espárragos verdes", u: "g", re: /esparrago/, cat: "Fruta y verdura" },
+  { key: "lechuga", n: "Lechuga", u: "g", re: /lechuga/, cat: "Fruta y verdura" },
+  { key: "tomate", n: "Tomate fresco", u: "g", re: /tomate/, cat: "Fruta y verdura" },
+  { key: "verdura", n: "Verdura variada para cocinar", u: "g", re: /verdura/, cat: "Fruta y verdura" },
+  { key: "perejil", n: "Perejil y limón", u: "ud", re: /perejil|limon/, cat: "Fruta y verdura" },
+  { key: "nueces", n: "Nueces", u: "g", re: /nuec/, cat: "Despensa" },
+  { key: "almendras", n: "Almendras", u: "g", re: /almendra/, cat: "Despensa" },
+  { key: "anacardos", n: "Anacardos", u: "g", re: /anacardo/, cat: "Despensa" },
+  { key: "miel", n: "Miel", u: "g", re: /miel/, cat: "Despensa" },
+  { key: "ketchup", n: "Ketchup sin azúcares añadidos", u: "g", re: /ketchup/, cat: "Despensa" },
+  { key: "mayonesa", n: "Mayonesa ligera", u: "g", re: /mayonesa/, cat: "Despensa" },
+  { key: "soja", n: "Salsa de soja baja en sal", u: "ml", re: /soja/, cat: "Despensa" },
+];

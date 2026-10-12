@@ -4,10 +4,10 @@ Menú intercambiable + registro diario de comidas. Funciona en Android e iOS com
 
 ## Estructura
 ```
-index.html            Vistas: Hoy, Menú, Recetas
+index.html            Vistas: Hoy, Menú, Semana, Recetas
 styles.css            Estilos (modo claro/oscuro, safe areas de iPhone)
-data.js               Platos, objetivos, recetas y notas (edita aquí el menú)
-app.js                Lógica: registro diario en localStorage, calculadora, copia de seguridad
+data.js               Perfiles (platos, objetivos, recetas, notas) y catálogo de la compra
+app.js                Lógica: registro diario, pasos, semana, peso, compra, costes, copia de seguridad
 sw.js                 Service worker (offline). Sube CACHE = "menujd-vN" en cada cambio
 manifest.webmanifest  Nombre, iconos, modo standalone
 icons/                192, 512, maskable y apple-touch-icon
@@ -41,5 +41,5 @@ Alternativa: arrastrar la carpeta a Vercel o Netlify, o servirla en un subdomini
 3. `git commit` + `git push`. Al abrir la app con conexión se descarga la versión nueva.
 
 ## Datos
-El registro se guarda solo en el móvil (localStorage). En Recetas → *Copia de seguridad* puedes exportar e importar un JSON.
+El registro, los pesos y los precios se guardan solo en el móvil (localStorage). En Recetas → *Copia de seguridad* puedes exportar e importar un JSON.
 En iOS, Safari puede borrar los datos de webs que no abres en semanas; la app instalada en pantalla de inicio no se ve afectada mientras la uses, pero exporta de vez en cuando.

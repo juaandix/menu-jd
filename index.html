@@ -37,6 +37,10 @@
       </header>
 
       <div class="summary" id="summary"></div>
+      <div class="steps-row">
+        <label for="stepsIn">Pasos del día<input type="text" id="stepsIn" inputmode="numeric" pattern="[0-9.]*" placeholder="p. ej. 12000" autocomplete="off"></label>
+        <p class="muted small" id="stepsInfo"></p>
+      </div>
       <div id="slots" class="slots"></div>
     </section>
 
@@ -57,8 +61,52 @@
         </div>
         <div class="total" id="bTot"></div>
         <button class="btn" id="bApply">Usar este plan para hoy</button>
+        <p class="muted small">Se añade al día que tengas abierto en Hoy: navega a días futuros para planificar la semana y sacar la lista de la compra.</p>
       </div>
       <div id="menuList"></div>
+    </section>
+
+    <!-- SEMANA -->
+    <section id="view-semana" class="view" hidden aria-label="Semana">
+      <header class="top">
+        <button class="icon-btn" id="prevWeek" aria-label="Semana anterior">‹</button>
+        <div class="date-wrap">
+          <h1 id="weekTitle">Semana</h1>
+          <p class="muted small" id="weekSub">Domingo a sábado</p>
+        </div>
+        <button class="icon-btn" id="nextWeek" aria-label="Semana siguiente">›</button>
+      </header>
+      <div class="summary" id="weekSummary"></div>
+      <div class="week-days" id="weekDays"></div>
+
+      <section class="block">
+        <h2>Peso</h2>
+        <form class="weight-form" id="weightForm">
+          <label for="wDate">Fecha<input type="date" id="wDate" required></label>
+          <label for="wKg">Kg<input type="text" id="wKg" inputmode="decimal" placeholder="86,4" autocomplete="off" required></label>
+          <button class="btn" type="submit">Guardar</button>
+        </form>
+        <div id="weightChart"></div>
+        <div id="weightList"></div>
+      </section>
+
+      <section class="block">
+        <h2>Lista de la compra</h2>
+        <p class="muted small">Sale de los platos registrados en esta semana. Pasta, arroz y pollo van en crudo/seco. Para planificar, registra los días que vienen desde Hoy o con "Monta tu día".</p>
+        <div id="shopList"></div>
+        <div class="row">
+          <button class="btn ghost" id="shopCopy">Copiar lista</button>
+          <button class="btn ghost" id="shopReset">Desmarcar todo</button>
+        </div>
+      </section>
+
+      <section class="block">
+        <details class="prices">
+          <summary>Precios de los ingredientes</summary>
+          <p class="muted small">Apunta lo que pagas en Mercadona (€/kg, €/l o €/unidad, según el ingrediente). Con ellos se calcula el coste de cada plato, de cada día y de la lista. Son comunes a todos los perfiles y se guardan en este móvil.</p>
+          <div id="priceList" class="price-list"></div>
+        </details>
+      </section>
     </section>
 
     <!-- RECETAS -->
@@ -74,7 +122,7 @@
       </section>
       <section class="block">
         <h2>Copia de seguridad</h2>
-        <p class="muted">Tu registro se guarda solo en este móvil. Exporta de vez en cuando por si cambias de teléfono o borras datos del navegador.</p>
+        <p class="muted">Tu registro, tus pesos y tus precios se guardan solo en este móvil. Exporta de vez en cuando por si cambias de teléfono o borras datos del navegador.</p>
         <div class="row">
           <button class="btn ghost" id="exportBtn">Exportar registro</button>
           <label class="btn ghost file-btn" for="importFile">Importar registro</label>
@@ -102,6 +150,7 @@
   <nav class="tabbar" aria-label="Secciones">
     <button data-view="hoy" class="active"><span class="ti">●</span>Hoy</button>
     <button data-view="menu"><span class="ti">☰</span>Menú</button>
+    <button data-view="semana"><span class="ti">▦</span>Semana</button>
     <button data-view="recetas"><span class="ti">✎</span>Recetas</button>
   </nav>
 
