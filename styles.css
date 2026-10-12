@@ -41,9 +41,10 @@ button,select,input{font:inherit;color:inherit}
 .muted{color:var(--muted)} .small{font-size:.85rem}
 .eyebrow{font-family:var(--mono);font-size:.7rem;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);margin:0 0 4px}
 .lead{color:var(--muted);margin:6px 0 0}
-.view{display:grid;gap:18px}
+.view{display:grid;gap:18px;grid-template-columns:minmax(0,1fr)}
 .page-head{padding-top:6px}
-.block{display:grid;gap:10px}
+.block{display:grid;gap:10px;min-width:0}
+code{overflow-wrap:anywhere;word-break:break-word}
 .row{display:flex;gap:10px;flex-wrap:wrap}
 
 /* top bar (Hoy) */
