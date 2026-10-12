@@ -118,7 +118,7 @@ tarta de queso (1/6)    166  14.9   5.3  8.1   # por porción
   - `sw.js`: caché `menujd-vN`, estrategia red primero con fallback a caché para peticiones del propio origen. Subir N en cada despliegue, y también `APP_VERSION` en `app.js` (se muestra en Recetas para comprobar qué versión tiene cargada el móvil). Las peticiones a otros orígenes (Google) se dejan pasar sin interceptar ni cachear.
   - `manifest.webmanifest` + `icons/` (192, 512, maskable 512, apple-touch-icon 180).
 - Persistencia, con clave por perfil: `localStorage["menujd.log.<profileId>.v1"]` =
-  `{ "YYYY-MM-DD": { type: "trabajo-gym", steps?: 12000, items: [{ slot:"D|C|N|S", ref?:"D4", m?: 1.5, n, k, p, c, f }] } }`.
+  `{ "YYYY-MM-DD": { type: "trabajo-gym", steps?: 12000, items: [{ slot:"D|C|N|S", ref?:"D4", m?: 1.5, i?: [ingredientes por ración], n, k, p, c, f }] } }`.
   Perfil activo en `localStorage["menujd.profile.v1"]`. El registro antiguo de antes de los perfiles (`menujd.log.v1`) se migra automáticamente a `menujd.log.jd.v1` la primera vez que carga `app.js`.
 
 ## Integración opcional con Google Calendar
@@ -170,6 +170,9 @@ Probar a 390×844, añadir platos, recargar y comprobar que el registro persiste
 - Guardado por perfil y por móvil en `localStorage["menujd.dishes.<id>.v1"] = { "D1": { i, k, p, c, f } }`; `rebuildIndex()` lo superpone a `data.js` (original en `profile._baseMenu`). "Restaurar original" lo borra. Lo ya registrado no cambia.
 - Mis productos: `localStorage["menujd.products.v1"] = [{ key, n, nut, g? }]`, comunes a todos los perfiles; se reconocen en los ingredientes por su nombre y salen en la lista de la compra y en precios. Se crean desde el editor y se borran en Recetas.
 - La copia de seguridad incluye `dishes` (del perfil) y `products`.
+- El editor tiene modos (`ed.mode`): `dish` (plato del Menú, guarda override), `log` (desde la hoja de añadir: "Cambiar ingredientes solo para hoy", registra con la ración elegida sin tocar el plato), `free` ("Montar con ingredientes": comida desde cero con macros automáticos) y `entry` (ingredientes de algo ya registrado).
+- Entradas del registro con ingredientes propios guardan `i` (por 1 ración) y `m`; la compra y el coste usan `x.i` antes que el plato de `ref`.
+- En Hoy, tocar una entrada abre su hoja: cambiar ración (recalcula desde los valores por ración = k/m), mover a otra franja, duplicar, ✎ ingredientes y borrar. Borrar (también con ✕) muestra un aviso con "Deshacer" (6 s).
 
 ## Ideas pendientes (no implementadas)
 - Sincronización entre dispositivos con backend Spring Boot + PostgreSQL.

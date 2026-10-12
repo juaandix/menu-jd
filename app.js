@@ -121,7 +121,7 @@ function renderHoy() {
       <div class="slot-head"><h3>${s.label}<small>${hint}</small></h3>
         <button class="add-btn" data-add="${s.id}">+ Añadir</button></div>
       ${items.length ? items.map((x) => `
-        <div class="entry"><div class="name"><b>${esc(x.n)}</b><span>${x.ref ? x.ref + " · " : ""}P ${r1(x.p)} · C ${r0(x.c || 0)} · G ${r0(x.f || 0)}${costLabel(itemDishCost(x)) ? " · " + costLabel(itemDishCost(x)) : ""}</span></div>
+        <div class="entry"><button class="name" type="button" data-entry="${x.idx}" aria-label="Editar ${esc(x.n)}"><b>${esc(x.n)}</b><span>${x.ref ? x.ref + " · " : ""}P ${r1(x.p)} · C ${r0(x.c || 0)} · G ${r0(x.f || 0)}${costLabel(itemDishCost(x)) ? " · " + costLabel(itemDishCost(x)) : ""}${x.i ? " · ✎" : ""}</span></button>
           <span class="kc">${r0(x.k)}</span>
           <button class="del" data-del="${x.idx}" aria-label="Quitar ${esc(x.n)}">✕</button></div>`).join("")
       : `<p class="empty">Nada registrado.</p>`}
@@ -164,6 +164,58 @@ function itemsCost(items) {
   }
   return { eur, missing, priced };
 }
+/* ---------- editar lo registrado: ración, mover, duplicar, ingredientes, borrar con deshacer ---------- */
+let entState = null;
+// Ración de una entrada: la guardada (m), deducida de las kcal del plato, o 1.
+function entryMult(x) { return x.m || (x.ref && !x.i && byId(x.ref) ? itemMult(x, byId(x.ref)) : 1); }
+function openEntry(idx) {
+  entState = { key: iso(current), idx };
+  const x = getDay(entState.key).items[idx];
+  if (!x) return;
+  const mult = entryMult(x);
+  const canIng = !!(x.i || (x.ref && byId(x.ref)));
+  $("#sheetTitle").textContent = x.n;
+  $("#sheetBody").innerHTML = `
+    <p class="ed-sum"><b>${macrosTxt({ k: x.k, p: x.p, c: x.c || 0, f: x.f || 0 })}</b></p>
+    ${x.i ? `<ul class="ent-ings">${x.i.map((r) => `<li>${esc(r)}</li>`).join("")}</ul>` : ""}
+    <div class="portion-card">
+      <p class="muted small">Ración</p>
+      <div class="portion-row">${PORTIONS.map((pt) => `<button class="portion-btn${Math.abs(pt.mult - mult) < 0.01 ? " is-default" : ""}" data-ent-portion="${pt.mult}"><b>${pt.label}×</b><span>${r0((x.k / mult) * pt.mult)} kcal · ${r1((x.p / mult) * pt.mult)} g P</span></button>`).join("")}</div>
+      <p class="muted small">Mover a</p>
+      <div class="recent-row">${profile.slots.filter((s) => s.id !== x.slot).map((s) => `<button class="chip-opt" data-ent-move="${s.id}">${s.label}</button>`).join("")}</div>
+    </div>
+    <div class="row">
+      ${canIng ? `<button class="btn ghost" data-ent-ing="1">✎ Ingredientes</button>` : ""}
+      <button class="btn ghost" data-ent-dup="1">Duplicar</button>
+      <button class="btn ghost danger" data-ent-del="1">Borrar</button>
+    </div>`;
+  $("#sheet").hidden = false; $("#sheetBg").hidden = false;
+}
+function entPortion(mult) {
+  const day = getDay(entState.key), x = day.items[entState.idx];
+  const old = entryMult(x);
+  const per = { k: x.k / old, p: x.p / old, c: (x.c || 0) / old, f: (x.f || 0) / old };
+  Object.assign(x, scaled(per, mult), { m: mult, n: withPortion(x.n, mult) });
+  saveAll(db); renderHoy(); closeSheet(); toast("Ración cambiada");
+}
+function entMove(slot) {
+  const x = getDay(entState.key).items[entState.idx];
+  x.slot = slot; saveAll(db); renderHoy(); closeSheet();
+  toast("Movido a " + profile.slots.find((s) => s.id === slot).label);
+}
+function entDup() {
+  const day = getDay(entState.key), x = day.items[entState.idx];
+  day.items.splice(entState.idx + 1, 0, JSON.parse(JSON.stringify(x)));
+  saveAll(db); renderHoy(); closeSheet(); toast("Duplicado");
+}
+function deleteEntry(key, idx) {
+  const day = getDay(key);
+  const [x] = day.items.splice(idx, 1);
+  saveAll(db); renderHoy(); closeSheet();
+  toast("Borrado: " + x.n, 6000, { label: "Deshacer", fn: () => {
+    const d = getDay(key); d.items.splice(Math.min(idx, d.items.length), 0, x); saveAll(db); renderHoy(); toast("Recuperado");
+  } });
+}
 function addItem(slot, item) {
   const day = getDay(iso(current));
   day.items.push({ slot, ...item });
@@ -202,8 +254,9 @@ function showSheetList() {
     <input type="search" id="sheetSearch" placeholder="Buscar un plato…" autocomplete="off" value="${esc(sheetState.query)}">
     <div id="recentRow"></div>
     <div id="sheetList"></div>
+    <button class="btn ghost free-btn" type="button" data-ed-free="1">🥣 Montar con ingredientes (macros automáticos)</button>
     <form class="custom" id="customForm">
-      <b>Otra cosa</b>
+      <b>Otra cosa (con tus macros)</b>
       <input type="text" id="cName" placeholder="Nombre (p. ej. café americano)" required>
       <div class="grid4">
         <label for="cK">kcal<input type="number" id="cK" inputmode="decimal" min="0" step="any" required></label>
@@ -238,6 +291,7 @@ function openPortionStep(dishId) {
         ${PORTIONS.map((pt) => `<button class="portion-btn${pt.mult === 1 ? " is-default" : ""}" data-portion="${pt.mult}" data-dish="${o.id}">
           <b>${pt.label}×</b><span>${r0(o.k * pt.mult)} kcal · ${r1(o.p * pt.mult)} g P</span></button>`).join("")}
       </div>
+      <button class="btn ghost" type="button" data-ed-logdish="${o.id}">✎ Cambiar ingredientes solo para hoy</button>
     </div>`;
 }
 function closeSheet() { $("#sheet").hidden = true; $("#sheetBg").hidden = true; }
@@ -328,6 +382,7 @@ function costLabel(cost) {
 // Ración registrada de un plato: las entradas nuevas guardan m; las antiguas se deducen de las kcal.
 function itemMult(x, o) { return x.m || (o && o.k ? x.k / o.k : 1); }
 function itemDishCost(x) {
+  if (x.i) return dishCost({ i: x.i }, x.m || 1);
   const o = x.ref && byId(x.ref);
   return o ? dishCost(o, itemMult(x, o)) : null;
 }
@@ -393,35 +448,90 @@ function bandStatus(slotId, m) {
   else if (m.p < t.pMin || m.p > t.pMax) out.push(`proteína fuera de ${t.pMin}–${t.pMax} g`);
   return out.length ? `<p class="band off">Fuera de la franja (${t.k} kcal): ${out.join(", ")}</p>` : `<p class="band ok">Dentro de la franja ✓</p>`;
 }
-function openEditor(id) {
-  const o = byId(id), slot = slotOf(id);
-  ed = { id, slot, n: o.n, i: [...o.i], m: { k: o.k, p: o.p, c: o.c, f: o.f }, base: profile._baseMenu[slot].find((x) => x.id === id) };
-  $("#sheetTitle").textContent = "Cambiar · " + o.n;
+// Modos: "dish" (plato del Menú, se guarda para siempre en este móvil), "log" (solo para registrarlo hoy),
+// "free" (comida montada desde cero con ingredientes) y "entry" (algo ya registrado en Hoy).
+const ZERO = { k: 0, p: 0, c: 0, f: 0 };
+function showEditor(state, title) {
+  ed = state;
+  $("#sheetTitle").textContent = title;
   renderEditor();
   $("#sheet").hidden = false; $("#sheetBg").hidden = false;
 }
+function openEditor(id) {
+  const o = byId(id), slot = slotOf(id);
+  showEditor({ mode: "dish", id, slot, n: o.n, i: [...o.i], m: { k: o.k, p: o.p, c: o.c, f: o.f }, base: profile._baseMenu[slot].find((x) => x.id === id) }, "Cambiar · " + o.n);
+}
+function openLogEditor(id) {
+  const o = byId(id);
+  showEditor({ mode: "log", id, slot: sheetState.slot, n: o.n, i: [...o.i], m: { k: o.k, p: o.p, c: o.c, f: o.f }, base: o }, "Solo para hoy · " + o.n);
+}
+function openFreeEditor() {
+  showEditor({ mode: "free", slot: sheetState.slot, n: "", i: [], m: { ...ZERO }, base: { n: "", i: [], ...ZERO } }, "Montar con ingredientes");
+}
+function openEntryEditor() {
+  const x = getDay(entState.key).items[entState.idx];
+  const o = x.ref && byId(x.ref);
+  const mult = entryMult(x);
+  const per = { k: x.k / mult, p: x.p / mult, c: (x.c || 0) / mult, f: (x.f || 0) / mult };
+  const i = x.i || (o ? o.i : []);
+  showEditor({ mode: "entry", slot: x.slot, n: baseName(x.n), i: [...i], m: per, base: { n: baseName(x.n), i: [...i], ...per }, mult }, "Ingredientes · " + baseName(x.n));
+}
 function renderEditor() {
-  const b = ed.base;
+  const b = ed.base, free = ed.mode === "free";
   const changed = ed.i.join("\n") !== b.i.join("\n") || ed.n.trim() !== b.n;
+  const showOrig = !free && (changed || (ed.mode === "dish" && byId(ed.id).mod));
+  const actions = {
+    dish: `<button class="btn" data-ed-save="1">Guardar plato</button>${byId(ed.id || "") && byId(ed.id).mod ? `<button class="btn ghost" data-ed-reset="1">Restaurar original</button>` : ""}`,
+    log: `<div class="portion-row">${PORTIONS.map((pt) => `<button class="portion-btn${pt.mult === 1 ? " is-default" : ""}" data-ed-log="${pt.mult}"><b>${pt.label}×</b><span>${r0(ed.m.k * pt.mult)} kcal · ${r1(ed.m.p * pt.mult)} g P</span></button>`).join("")}</div>`,
+    free: `<button class="btn" data-ed-log="1"${ed.i.length ? "" : " disabled"}>Registrar</button>`,
+    entry: `<button class="btn" data-ed-entry="1">Guardar cambios</button>`,
+  }[ed.mode];
+  const note = {
+    dish: "El cambio se guarda en este móvil y se usa al registrar, en Monta tu día, la lista de la compra y los costes. Lo ya registrado no cambia.",
+    log: "Solo cambia lo que registras ahora; el plato del Menú se queda como está. Elige la ración para registrarlo.",
+    free: "Añade los ingredientes con sus gramos y los macros se calculan solos.",
+    entry: `Cambia solo esta entrada del registro${ed.mult !== 1 ? ` (ración ${r1(ed.mult)}×; los valores de arriba son por ración)` : ""}.`,
+  }[ed.mode];
   $("#sheetBody").innerHTML = `
-    <label for="edName">Nombre del plato<input type="text" id="edName" value="${esc(ed.n)}" autocomplete="off"></label>
-    <div class="ed-list">${ed.i.map((raw, idx) => {
+    <label for="edName">${free ? "Nombre (opcional)" : "Nombre del plato"}<input type="text" id="edName" value="${esc(ed.n)}" placeholder="${free ? "p. ej. Tostadas con pavo" : ""}" autocomplete="off"></label>
+    <div class="ed-list">${ed.i.length ? ed.i.map((raw, idx) => {
       const m = ingMacros(raw);
       return `<div class="ed-row"><div class="ed-name"><b>${esc(raw)}</b><small>${m ? `${r0(m.k)} kcal · ${r1(m.p)} g P` : "sin macros (no se puede cambiar)"}</small></div>
         ${m ? `<button class="chip-opt" data-ed-change="${idx}">Cambiar</button><button class="del" data-ed-remove="${idx}" aria-label="Quitar ${esc(raw)}">✕</button>` : ""}</div>`;
-    }).join("")}</div>
+    }).join("") : `<p class="empty">Aún no hay ingredientes.</p>`}</div>
     <button class="btn ghost" data-ed-add="1">＋ Añadir ingrediente</button>
     <div class="ed-total">
-      <div><small>Ahora</small><b>${macrosTxt(ed.m)}</b></div>
-      ${changed || byId(ed.id).mod ? `<div><small>Original</small><span>${macrosTxt(b)}</span></div>` : ""}
-      ${bandStatus(ed.slot, ed.m)}
+      <div><small>${ed.mode === "log" || ed.mode === "entry" ? "Ahora (1 ración)" : "Ahora"}</small><b>${macrosTxt(ed.m)}</b></div>
+      ${showOrig ? `<div><small>Original</small><span>${macrosTxt(b)}</span></div>` : ""}
+      ${ed.i.length ? bandStatus(ed.slot, ed.m) : ""}
     </div>
-    <div class="row">
-      <button class="btn" data-ed-save="1">Guardar plato</button>
-      ${byId(ed.id).mod ? `<button class="btn ghost" data-ed-reset="1">Restaurar original</button>` : ""}
-    </div>
-    <p class="muted small">El cambio se guarda en este móvil y se usa al registrar, en Monta tu día, la lista de la compra y los costes. Lo ya registrado no cambia.</p>`;
+    <div class="row">${actions}</div>
+    <p class="muted small">${note}</p>`;
   $("#edName").addEventListener("input", (e) => { ed.n = e.target.value; });
+}
+const portionLabel = (mult) => (PORTIONS.find((p) => p.mult === mult) || { label: String(mult).replace(".", ",") }).label;
+const baseName = (n) => String(n).replace(/ · ración [^·]*$/, "");
+const withPortion = (n, mult) => baseName(n) + (mult === 1 ? "" : ` · ración ${portionLabel(mult)}`);
+function scaled(m, mult) { return { k: r0(m.k * mult), p: r1(m.p * mult), c: r1(m.c * mult), f: r1(m.f * mult) }; }
+// Registra lo del editor (modos log y free) en la franja abierta de Hoy.
+function logFromEditor(mult) {
+  if (!ed.i.length) { toast("Añade al menos un ingrediente"); return; }
+  const changed = ed.i.join("\n") !== ed.base.i.join("\n");
+  let n = ed.n.trim();
+  if (ed.mode === "free" && !n) n = ed.i.join(" + ").slice(0, 70);
+  if (ed.mode === "log" && changed && n === ed.base.n) n += " · con cambios";
+  const item = { n: withPortion(n || ed.base.n, mult), m: mult, ...scaled(ed.m, mult) };
+  if (ed.mode === "log") { item.ref = ed.id; pushRecent(sheetState.slot, ed.id); }
+  if (ed.mode === "free" || changed) item.i = [...ed.i];
+  addItem(sheetState.slot, item);
+  closeSheet(); toast("Añadido: " + item.n);
+}
+function saveEntryFromEditor() {
+  const day = getDay(entState.key), x = day.items[entState.idx];
+  const changed = ed.i.join("\n") !== ed.base.i.join("\n");
+  Object.assign(x, scaled(ed.m, ed.mult), { m: ed.mult, n: withPortion(ed.n.trim() || ed.base.n, ed.mult) });
+  if (changed || x.i) x.i = [...ed.i];
+  saveAll(db); renderHoy(); closeSheet(); toast("Entrada actualizada");
 }
 // Opciones del buscador: cada entrada del catálogo con macros (y su versión cocinada si la tiene) + Mis productos.
 function foodOptions() {
@@ -509,6 +619,7 @@ function applyPick() {
   renderEditor();
 }
 function saveEditor() {
+  if (ed.mode !== "dish") return;
   const ov = loadDishOverrides();
   const n = ed.n.trim() || ed.base.n;
   if (ed.i.join("\n") === ed.base.i.join("\n") && n === ed.base.n) delete ov[ed.id];
@@ -667,9 +778,10 @@ function buildShop(rows) {
   const agg = new Map(), loose = new Map();
   for (const r of rows) for (const x of r.items) {
     const o = x.ref && byId(x.ref);
-    if (!o) continue;
-    const mult = itemMult(x, o);
-    for (const raw of o.i) {
+    const ings = x.i || (o && o.i);
+    if (!ings) continue;
+    const mult = x.i ? x.m || 1 : itemMult(x, o);
+    for (const raw of ings) {
       const { c, qty } = parseIng(raw);
       if (!c) { loose.set(raw, (loose.get(raw) || 0) + 1); continue; }
       const a = agg.get(c.key) || { c, qty: 0, gusto: false };
@@ -780,7 +892,13 @@ function show(view) {
   window.scrollTo(0, 0);
 }
 let toastT;
-function toast(msg, ms = 2000) { const t = $("#toast"); t.textContent = msg; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => (t.hidden = true), ms); }
+let toastAction = null;
+function toast(msg, ms = 2000, action = null) {
+  const t = $("#toast");
+  toastAction = action;
+  t.innerHTML = esc(msg) + (action ? ` <button class="toast-act" type="button">${esc(action.label)}</button>` : "");
+  t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => (t.hidden = true), ms);
+}
 
 /* ---------- cambio de perfil ---------- */
 function renderProfileSelect() {
@@ -809,7 +927,17 @@ document.addEventListener("click", (e) => {
   else if (b.dataset.goday) { current = new Date(b.dataset.goday + "T12:00:00"); show("hoy"); }
   else if (b.dataset.wdel) { const w = loadWeights(); delete w[b.dataset.wdel]; saveWeights(w); renderSemana(); toast("Peso borrado"); }
   else if (b.dataset.add) openSheet(b.dataset.add);
-  else if (b.dataset.del !== undefined) { const day = getDay(iso(current)); day.items.splice(+b.dataset.del, 1); saveAll(db); renderHoy(); }
+  else if (b.dataset.del !== undefined) deleteEntry(iso(current), +b.dataset.del);
+  else if (b.dataset.entry !== undefined) openEntry(+b.dataset.entry);
+  else if (b.dataset.entPortion) entPortion(parseFloat(b.dataset.entPortion));
+  else if (b.dataset.entMove) entMove(b.dataset.entMove);
+  else if (b.dataset.entDup) entDup();
+  else if (b.dataset.entDel) deleteEntry(entState.key, entState.idx);
+  else if (b.dataset.entIng) openEntryEditor();
+  else if (b.dataset.edLogdish) openLogEditor(b.dataset.edLogdish);
+  else if (b.dataset.edFree) openFreeEditor();
+  else if (b.dataset.edLog) logFromEditor(parseFloat(b.dataset.edLog));
+  else if (b.dataset.edEntry) saveEntryFromEditor();
   else if (b.id === "portionBack") { showSheetList(); }
   else if (b.dataset.portion) {
     const o = byId(b.dataset.dish);
@@ -1228,7 +1356,7 @@ $("#healthWeek").addEventListener("click", () => {
   runHealthSync(weekStart, to, () => renderSemana());
 });
 
-const APP_VERSION = "v11"; // igual que CACHE en sw.js
+const APP_VERSION = "v12"; // igual que CACHE en sw.js
 $("#appVersion").textContent = "Versión de la app: " + APP_VERSION;
 
 /* arranque */
@@ -1237,4 +1365,7 @@ initGcalSettings();
 renderMenu(); renderRecetas(); renderHoy();
 autoHealth();
 if ("serviceWorker" in navigator) window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
-$("#toast").addEventListener("click", () => ($("#toast").hidden = true));
+$("#toast").addEventListener("click", (e) => {
+  if (e.target.closest(".toast-act") && toastAction) { const fn = toastAction.fn; toastAction = null; fn(); return; }
+  $("#toast").hidden = true;
+});
