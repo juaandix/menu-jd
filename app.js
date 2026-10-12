@@ -77,6 +77,7 @@ function renderHoy() {
   $("#dayType").innerHTML = profile.dayTypes.map((t) => `<option value="${t.id}">${t.label} · ${t.kcal}</option>`).join("");
   $("#dayType").value = type.id;
   $("#gcalDetect").hidden = !profile.calendar;
+  $("#healthDay").hidden = !profile.health;
 
   const t = totals(day.items);
   const adj = stepAdjust(day, type, key);
@@ -134,6 +135,7 @@ function renderSteps(day, type, key, adj) {
   else if (typeof day.steps === "number")
     msg = `≈ ${fmt(Math.round(day.steps * KCAL_PER_STEP_KG * latestWeight(key)))} kcal de actividad andando (informativo: este tipo de día no ajusta el objetivo por pasos).`;
   else msg = "Opcional: quedan en el historial semanal.";
+  if (typeof day.steps === "number" && type.steps && key === iso(new Date())) msg += " El día no ha terminado: actualízalos por la noche.";
   $("#stepsInfo").textContent = msg;
 }
 function itemsCost(items) {
@@ -341,7 +343,8 @@ function renderRecetas() {
     <ul>${x.i.map((i) => `<li>${i}</li>`).join("")}</ul><ol>${x.s.map((i) => `<li>${i}</li>`).join("")}</ol>
     <div class="macros"><span>${x.m}</span></div></article>`).join("");
   $("#notes").innerHTML = profile.notes.map((n) => `<li>${n}</li>`).join("");
-  $("#gcalSection").hidden = !profile.calendar;
+  $("#gcalSection").hidden = !profile.calendar && !profile.health;
+  $("#healthHelp").hidden = !profile.health;
 }
 
 /* ---------- SEMANA: historial, peso, lista de la compra y precios ---------- */
@@ -411,6 +414,7 @@ function renderSemana() {
       </span></button>`;
   }).join("");
 
+  $("#healthWeek").hidden = !profile.health;
   renderWeight();
   renderShop(rows);
   renderPrices();
@@ -756,12 +760,142 @@ $("#gcalSave").addEventListener("click", () => {
   const clientId = $("#gcalClientId").value.trim();
   const keyword = $("#gcalKeyword").value.trim() || "turno";
   saveGcalCfg({ clientId, keyword });
-  clearGcalToken(); gcalTokenClient = null;
+  clearGcalToken(); gcalTokenClient = null; clearHealthToken();
   $("#gcalMsg").textContent = "Ajustes guardados.";
 });
 $("#gcalDisconnect").addEventListener("click", () => {
-  clearGcalToken(); gcalTokenClient = null;
+  clearGcalToken(); gcalTokenClient = null; clearHealthToken();
   $("#gcalMsg").textContent = "Desconectado.";
+});
+
+/* ---------- Google Health / Fitbit (opcional, bajo demanda, solo perfiles con health.enabled) ---------- */
+// Usa el mismo Client ID que el calendario. Token aparte (otros permisos) y solo en sessionStorage.
+const HEALTH_API = "https://health.googleapis.com/v4/users/me/dataTypes/";
+const HEALTH_SCOPES = {
+  steps: "https://www.googleapis.com/auth/googlehealth.activity_and_fitness.readonly",
+  weight: "https://www.googleapis.com/auth/googlehealth.health_metrics_and_measurements.readonly",
+};
+function healthTokKey() { return `menujd.ghealth.tok.${profile.id}.v1`; }
+function healthToken() { try { return JSON.parse(sessionStorage.getItem(healthTokKey())); } catch { return null; } }
+function clearHealthToken() { try { sessionStorage.removeItem(healthTokKey()); } catch {} }
+async function ensureHealthToken() {
+  const tok = healthToken();
+  if (tok && tok.exp > Date.now() + 30000) return tok;
+  const cfg = gcalCfg();
+  if (!cfg.clientId) throw new Error("Configura primero el Client ID en Recetas → Google.");
+  await loadGIS();
+  return new Promise((resolve, reject) => {
+    const client = google.accounts.oauth2.initTokenClient({
+      client_id: cfg.clientId,
+      scope: Object.values(HEALTH_SCOPES).join(" "),
+      callback: (resp) => {
+        if (resp.error) return reject(new Error(resp.error === "access_denied" ? "Google denegó el acceso (¿tu cuenta está en usuarios de prueba?)" : resp.error));
+        const has = (s) => google.accounts.oauth2.hasGrantedAllScopes(resp, s);
+        if (!has(HEALTH_SCOPES.steps)) return reject(new Error("Sin permiso para leer los pasos: márcalo al conectar."));
+        const t = { token: resp.access_token, exp: Date.now() + resp.expires_in * 1000, weight: has(HEALTH_SCOPES.weight) };
+        try { sessionStorage.setItem(healthTokKey(), JSON.stringify(t)); } catch {}
+        resolve(t);
+      },
+      error_callback: (err) => reject(new Error((err && err.type) || "No se pudo conectar con Google")),
+    });
+    client.requestAccessToken({ prompt: "" });
+  });
+}
+async function healthFetch(tok, path, body) {
+  let res;
+  try {
+    res = await fetch(HEALTH_API + path, body
+      ? { method: "POST", headers: { Authorization: "Bearer " + tok.token, "Content-Type": "application/json" }, body: JSON.stringify(body) }
+      : { headers: { Authorization: "Bearer " + tok.token } });
+  } catch { throw new Error("No se pudo conectar con Google Health (¿sin conexión?)"); }
+  if (res.status === 401) { clearHealthToken(); throw new Error("La conexión con Google caducó, inténtalo otra vez."); }
+  if (res.status === 403) throw new Error("Google Health denegó el acceso (403): revisa que la API está habilitada y los permisos añadidos.");
+  if (!res.ok) throw new Error("Google Health respondió con un error (" + res.status + ")");
+  return res.json();
+}
+const civil = (d) => ({ date: { year: d.getFullYear(), month: d.getMonth() + 1, day: d.getDate() }, time: { hours: 0, minutes: 0, seconds: 0, nanos: 0 } });
+const civilIso = (c) => `${c.year}-${String(c.month).padStart(2, "0")}-${String(c.day).padStart(2, "0")}`;
+// Pasos totales por día en [from, to): { "YYYY-MM-DD": 12345 }. Días sin datos no aparecen.
+async function healthSteps(tok, from, to) {
+  const out = {};
+  let pageToken;
+  do {
+    const data = await healthFetch(tok, "steps/dataPoints:dailyRollUp", { range: { start: civil(from), end: civil(to) }, windowSizeDays: 1, ...(pageToken ? { pageToken } : {}) });
+    for (const p of data.rollupDataPoints || []) {
+      const v = p.steps && (p.steps.countSum ?? p.steps.count_sum);
+      const d = p.civilStartTime && p.civilStartTime.date;
+      if (v != null && d) out[civilIso(d)] = parseInt(v, 10);
+    }
+    pageToken = data.nextPageToken;
+  } while (pageToken);
+  return out;
+}
+// Peso por día en [from, to) (el último de cada día, en kg con 1 decimal), en la hora local de la medición.
+async function healthWeights(tok, from, to) {
+  const filter = `weight.sample_time.physical_time >= "${from.toISOString()}" AND weight.sample_time.physical_time < "${to.toISOString()}"`;
+  const pts = [];
+  let pageToken;
+  do {
+    const q = new URLSearchParams({ filter, pageSize: "200", ...(pageToken ? { pageToken } : {}) });
+    const data = await healthFetch(tok, "weight/dataPoints?" + q);
+    for (const dp of data.dataPoints || []) {
+      const w = dp.weight;
+      if (!w || w.weightGrams == null) continue;
+      const st = w.sampleTime || {};
+      const t = Date.parse(st.physicalTime);
+      if (!Number.isFinite(t)) continue;
+      const off = parseFloat(st.utcOffset);
+      const key = Number.isFinite(off) ? new Date(t + off * 1000).toISOString().slice(0, 10) : iso(new Date(t));
+      pts.push({ t, key, kg: Math.round(w.weightGrams / 100) / 10 });
+    }
+    pageToken = data.nextPageToken;
+  } while (pageToken);
+  const out = {};
+  pts.sort((a, b) => a.t - b.t).forEach((p) => (out[p.key] = p.kg));
+  return out;
+}
+// Trae pasos (y peso si hay permiso) de [from, to) y los guarda. No pide días futuros.
+async function syncHealth(from, to) {
+  const tomorrow = new Date(); tomorrow.setHours(0, 0, 0, 0); tomorrow.setDate(tomorrow.getDate() + 1);
+  if (to > tomorrow) to = tomorrow;
+  const start = new Date(from); start.setHours(0, 0, 0, 0);
+  const end = new Date(to); end.setHours(0, 0, 0, 0);
+  if (end <= start) throw new Error("No hay datos de días futuros.");
+  const tok = await ensureHealthToken();
+  const steps = await healthSteps(tok, start, end);
+  Object.entries(steps).forEach(([key, n]) => { getDay(key).steps = n; });
+  saveAll(db);
+  let weights = {};
+  if (tok.weight) {
+    weights = await healthWeights(tok, start, end);
+    if (Object.keys(weights).length) saveWeights({ ...loadWeights(), ...weights });
+  }
+  return { steps, weights, weightAllowed: tok.weight };
+}
+async function runHealthSync(from, to, onDone) {
+  if (!profile.health) return;
+  try {
+    toast("Consultando Google Health…");
+    const r = await syncHealth(from, to);
+    const nS = Object.keys(r.steps).length, nW = Object.keys(r.weights).length;
+    onDone(r);
+    if (!nS && !nW) toast("Google Health no tiene datos de esos días");
+    else toast(`Fitbit: ${nS} ${nS === 1 ? "día" : "días"} de pasos${nW ? `, ${nW} ${nW === 1 ? "peso" : "pesos"}` : ""}`);
+  } catch (err) {
+    toast(err.message || "No se pudo sincronizar con Google Health");
+  }
+}
+$("#healthDay").addEventListener("click", () => {
+  const to = new Date(current); to.setDate(to.getDate() + 1);
+  runHealthSync(current, to, (r) => {
+    renderHoy();
+    const key = iso(current);
+    if (r.steps[key] != null && key === iso(new Date())) setTimeout(() => toast(`Hoy: ${r.steps[key].toLocaleString("es-ES")} pasos hasta ahora · vuelve a sincronizar por la noche`), 2100);
+  });
+});
+$("#healthWeek").addEventListener("click", () => {
+  const to = new Date(weekStart); to.setDate(to.getDate() + 7);
+  runHealthSync(weekStart, to, () => renderSemana());
 });
 
 /* arranque */

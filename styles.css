@@ -154,6 +154,8 @@ input[type=text],input[type=number],input[type=search],input[type=date]{width:10
 .steps-row{display:grid;gap:4px;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px 14px}
 .steps-row input{font-family:var(--mono);font-variant-numeric:tabular-nums}
 .steps-row p{margin:0}
+.steps-line{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:end}
+.steps-line .btn{padding:10px 14px;min-height:44px}
 .macros .cost{color:var(--accent);font-weight:600}
 
 /* semana */

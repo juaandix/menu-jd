@@ -126,6 +126,14 @@ tarta de queso (1/6)    166  14.9   5.3  8.1   # por porción
 - Almacenamiento, con clave por perfil: `localStorage["menujd.gcal.cfg.<profileId>.v1"]` = `{ clientId, keyword }`; `sessionStorage["menujd.gcal.tok.<profileId>.v1"]` = `{ token, exp }` (token de acceso de corta duración, se pierde al cerrar la pestaña).
 - El script `accounts.google.com/gsi/client` se inyecta dinámicamente solo al usar la función; si no hay conexión o no está configurado el Client ID, falla con un toast y el usuario sigue pudiendo elegir el tipo de día a mano como siempre.
 
+## Integración opcional con Google Health (Fitbit)
+- Solo en perfiles con `health: { enabled: true }` (hoy, solo JD, que usa un Fitbit Air). Botones "⟳ Fitbit" en Hoy (día abierto) y "⟳ Traer pasos y peso de Fitbit" en Semana (los 7 días, nunca días futuros).
+- API: Google Health API v4 (la Fitbit Web API antigua se apaga el 30/10/2026). Mismo Client ID y mismo script GIS que el calendario, pero token aparte en `sessionStorage["menujd.ghealth.tok.<id>.v1"]` = `{ token, exp, weight }`.
+- Permisos: `googlehealth.activity_and_fitness.readonly` (pasos, obligatorio) y `googlehealth.health_metrics_and_measurements.readonly` (peso, opcional: si no se concede, se salta el peso). Son permisos restringidos: la app de Google Cloud debe seguir en modo "Prueba" con la cuenta del usuario en "Usuarios de prueba".
+- Pasos: `POST https://health.googleapis.com/v4/users/me/dataTypes/steps/dataPoints:dailyRollUp` con `range` civil (fecha local, intervalo cerrado-abierto) y `windowSizeDays: 1`; se lee `rollupDataPoints[].steps.countSum` (string) y `civilStartTime.date`. Se guarda en `day.steps` (sobrescribe lo escrito a mano).
+- Peso: `GET .../weight/dataPoints?filter=weight.sample_time.physical_time >= "…Z" AND … < "…Z"`; `dataPoints[].weight.weightGrams` y `sampleTime.{physicalTime, utcOffset}`; se guarda el último de cada día local en `menujd.weight.<id>.v1`.
+- Implementado según la documentación oficial y probado con respuestas simuladas; pendiente de confirmar con la cuenta real (CORS desde el navegador incluido). Si fallase el CORS, la alternativa es un backend.
+
 ## Requisitos de plataforma
 - iOS: Safari 16.4+, metas `apple-mobile-web-app-*` y `apple-touch-icon`. Nada de APIs no soportadas en iOS (Web Bluetooth, Background Sync…).
 - Android: Chrome, instalable vía manifest + service worker.
@@ -150,4 +158,4 @@ Probar a 390×844, añadir platos, recargar y comprobar que el registro persiste
 
 ## Ideas pendientes (no implementadas)
 - Sincronización entre dispositivos con backend Spring Boot + PostgreSQL.
-- Integración con Google Health / Hevy (Hevy solo exporta tipo de entreno, duración y kcal estimadas).
+- Integración con Hevy (solo exporta tipo de entreno, duración y kcal estimadas).

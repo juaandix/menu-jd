@@ -1,5 +1,5 @@
 // Sube la versión cada vez que cambies archivos para que los móviles descarguen la nueva.
-const CACHE = "menujd-v4";
+const CACHE = "menujd-v5";
 const ASSETS = [
   "./", "index.html", "styles.css", "data.js", "app.js", "manifest.webmanifest",
   "icons/icon-192.png", "icons/icon-512.png", "icons/icon-maskable-512.png", "icons/apple-touch-icon.png",

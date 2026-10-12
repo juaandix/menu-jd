@@ -3,6 +3,7 @@
 // defaultType(date): tipo de día propuesto cuando no hay registro aún para esa fecha.
 // builder opcional {main:[...], snackSlot}: habilita "Monta tu día" en la vista Menú.
 // calendar opcional {enabled:true}: habilita el botón de detección por Google Calendar en Hoy.
+// health opcional {enabled:true}: habilita traer pasos y peso de Google Health (Fitbit) en Hoy y Semana.
 // weight: kg de referencia (cálculo de pasos si no hay pesos registrados); weightGoal opcional (línea en la gráfica).
 // dayTypes[].steps opcional: pasos que ya incluye ese objetivo de kcal; si se registran pasos reales, se ajusta.
 
@@ -19,6 +20,7 @@ const PROFILES = {
     },
     builder: { main: ["D", "C", "N"], snackSlot: "S" },
     calendar: { enabled: true },
+    health: { enabled: true }, // pasos y peso desde Google Health (Fitbit), con el mismo Client ID que el calendario
     dayTypes: [
       { id: "trabajo-gym", label: "Trabajo + gym", kcal: 2500, mods: 3, steps: 15000 },
       { id: "trabajo", label: "Trabajo sin gym", kcal: 2325, mods: 2, steps: 15000 },

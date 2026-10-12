@@ -38,7 +38,10 @@
 
       <div class="summary" id="summary"></div>
       <div class="steps-row">
-        <label for="stepsIn">Pasos del día<input type="text" id="stepsIn" inputmode="numeric" pattern="[0-9.]*" placeholder="p. ej. 12000" autocomplete="off"></label>
+        <div class="steps-line">
+          <label for="stepsIn">Pasos del día<input type="text" id="stepsIn" inputmode="numeric" pattern="[0-9.]*" placeholder="p. ej. 12000" autocomplete="off"></label>
+          <button class="btn ghost" id="healthDay" type="button" hidden>⟳ Fitbit</button>
+        </div>
         <p class="muted small" id="stepsInfo"></p>
       </div>
       <div id="slots" class="slots"></div>
@@ -78,6 +81,7 @@
       </header>
       <div class="summary" id="weekSummary"></div>
       <div class="week-days" id="weekDays"></div>
+      <button class="btn ghost" id="healthWeek" type="button" hidden>⟳ Traer pasos y peso de Fitbit</button>
 
       <section class="block">
         <h2>Peso</h2>
@@ -131,8 +135,9 @@
         <p class="muted small" id="backupMsg" role="status"></p>
       </section>
       <section class="block" id="gcalSection">
-        <h2>Calendario de turnos (Google)</h2>
+        <h2>Google: turnos y Fitbit</h2>
         <p class="muted">Conecta tu Google Calendar para que el botón 📅 de la pantalla Hoy proponga si ese día trabajas, buscando una palabra clave en el título de los eventos de ese día. Necesita conexión a internet; el resto de la app sigue funcionando sin ella.</p>
+        <p class="muted" id="healthHelp">Con el mismo Client ID, los botones "⟳ Fitbit" de Hoy y Semana traen tus pasos (y tu peso, si lo registras en Google Health) desde la API de Google Health. En el proyecto de Google Cloud tienen que estar habilitada la "Google Health API" y los permisos <code>googlehealth.activity_and_fitness.readonly</code> y, para el peso, <code>googlehealth.health_metrics_and_measurements.readonly</code>.</p>
         <div class="sel">
           <label for="gcalClientId">Client ID de Google<input type="text" id="gcalClientId" placeholder="xxxx.apps.googleusercontent.com"></label>
           <label for="gcalKeyword">Palabra clave<input type="text" id="gcalKeyword" placeholder="turno"></label>
