@@ -583,7 +583,7 @@ function show(view) {
   window.scrollTo(0, 0);
 }
 let toastT;
-function toast(msg) { const t = $("#toast"); t.textContent = msg; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => (t.hidden = true), 2000); }
+function toast(msg, ms = 2000) { const t = $("#toast"); t.textContent = msg; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => (t.hidden = true), ms); }
 
 /* ---------- cambio de perfil ---------- */
 function renderProfileSelect() {
@@ -684,7 +684,12 @@ $("#importFile").addEventListener("change", async (e) => {
 /* ---------- Google Calendar (opcional, bajo demanda, solo perfiles con calendar.enabled) ---------- */
 function gcalCfgKey() { return `menujd.gcal.cfg.${profile.id}.v1`; }
 function gcalTokKey() { return `menujd.gcal.tok.${profile.id}.v1`; }
-function gcalCfg() { try { return JSON.parse(localStorage.getItem(gcalCfgKey())) || {}; } catch { return {}; } }
+// Lo guardado en el móvil manda; si no hay Client ID guardado, se usa el del perfil (data.js).
+function gcalCfg() {
+  let cfg = {};
+  try { cfg = JSON.parse(localStorage.getItem(gcalCfgKey())) || {}; } catch {}
+  return { ...cfg, clientId: cfg.clientId || (profile.calendar && profile.calendar.clientId) || "" };
+}
 function saveGcalCfg(cfg) { localStorage.setItem(gcalCfgKey(), JSON.stringify(cfg)); }
 function gcalToken() { try { return JSON.parse(sessionStorage.getItem(gcalTokKey())); } catch { return null; } }
 function saveGcalToken(t) { sessionStorage.setItem(gcalTokKey(), JSON.stringify(t)); }
@@ -809,8 +814,18 @@ async function healthFetch(tok, path, body) {
       : { headers: { Authorization: "Bearer " + tok.token } });
   } catch { throw new Error("No se pudo conectar con Google Health (¿sin conexión?)"); }
   if (res.status === 401) { clearHealthToken(); throw new Error("La conexión con Google caducó, inténtalo otra vez."); }
-  if (res.status === 403) throw new Error("Google Health denegó el acceso (403): revisa que la API está habilitada y los permisos añadidos.");
-  if (!res.ok) throw new Error("Google Health respondió con un error (" + res.status + ")");
+  if (!res.ok) {
+    // Google explica el motivo en { error: { message, status, details:[{ reason }] } }: se muestra tal cual para poder diagnosticar.
+    let why = "";
+    try {
+      const e = (await res.json()).error || {};
+      const reason = (e.details || []).map((d) => d.reason).filter(Boolean)[0];
+      why = [reason || e.status, e.message].filter(Boolean).join(" · ");
+    } catch {}
+    if (res.status === 403 && /SERVICE_DISABLED|has not been used|is disabled/i.test(why)) throw new Error("La Google Health API no está habilitada en tu proyecto de Google Cloud. " + why);
+    if (res.status === 403 && /SCOPE_INSUFFICIENT|insufficient/i.test(why)) { clearHealthToken(); throw new Error("Falta un permiso de Google Health: vuelve a pulsar y márcalo. " + why); }
+    throw new Error(`Google Health: error ${res.status}${why ? " · " + why : ""}`);
+  }
   return res.json();
 }
 const civil = (d) => ({ date: { year: d.getFullYear(), month: d.getMonth() + 1, day: d.getDate() }, time: { hours: 0, minutes: 0, seconds: 0, nanos: 0 } });
@@ -882,7 +897,7 @@ async function runHealthSync(from, to, onDone) {
     if (!nS && !nW) toast("Google Health no tiene datos de esos días");
     else toast(`Fitbit: ${nS} ${nS === 1 ? "día" : "días"} de pasos${nW ? `, ${nW} ${nW === 1 ? "peso" : "pesos"}` : ""}`);
   } catch (err) {
-    toast(err.message || "No se pudo sincronizar con Google Health");
+    toast(err.message || "No se pudo sincronizar con Google Health", 9000);
   }
 }
 $("#healthDay").addEventListener("click", () => {
@@ -903,3 +918,4 @@ renderProfileSelect();
 initGcalSettings();
 renderMenu(); renderRecetas(); renderHoy();
 if ("serviceWorker" in navigator) window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
+$("#toast").addEventListener("click", () => ($("#toast").hidden = true));

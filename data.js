@@ -19,7 +19,8 @@ const PROFILES = {
       return this.gymDays.includes(date.getDay()) ? "trabajo-gym" : "trabajo";
     },
     builder: { main: ["D", "C", "N"], snackSlot: "S" },
-    calendar: { enabled: true },
+    // clientId: Client ID OAuth (tipo "Aplicación web") por defecto para calendario y Google Health; no es secreto.
+    calendar: { enabled: true, clientId: "711298594223-tvim0nptilom1d33c7vm4mh7n7l9tgkr.apps.googleusercontent.com" },
     health: { enabled: true }, // pasos y peso desde Google Health (Fitbit), con el mismo Client ID que el calendario
     dayTypes: [
       { id: "trabajo-gym", label: "Trabajo + gym", kcal: 2500, mods: 3, steps: 15000 },
