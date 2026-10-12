@@ -5,6 +5,14 @@ const r1 = (x) => Math.round(x * 10) / 10;
 
 /* ---------- perfil activo ---------- */
 const PROFILE_KEY = "menujd.profile.v1";
+// Enlace con ?perfil=<id> (p. ej. para instalar la app en el móvil de Cristina): fija ese perfil y limpia la URL.
+(function profileFromUrl() {
+  const p = new URLSearchParams(location.search).get("perfil");
+  if (!p) return;
+  const id = Object.keys(PROFILES).find((k) => k === p.toLowerCase() || norm(PROFILES[k].label).split(" ")[0] === norm(p));
+  if (id) try { localStorage.setItem(PROFILE_KEY, id); } catch {}
+  history.replaceState(null, "", location.pathname + location.hash);
+})();
 let profile = PROFILES[localStorage.getItem(PROFILE_KEY)] || PROFILES.jd;
 let ALL, byId, slotOf;
 function rebuildIndex() {
@@ -672,13 +680,21 @@ $("#importFile").addEventListener("change", async (e) => {
   try {
     const data = JSON.parse(await f.text());
     if (!data || typeof data !== "object" || Array.isArray(data)) throw new Error();
-    // v2: { app, version, log, weight, prices }; v1 (antiguo): directamente { "YYYY-MM-DD": día }.
+    // v2: { app, version, profile, log, weight, prices }; v1 (antiguo): directamente { "YYYY-MM-DD": día }.
+    // Cada copia va a su perfil: el de dentro del archivo (v2) o el del nombre "menujd-registro-<id>-fecha.json" (v1).
+    const target = (data.app === "menujd" && data.profile) || (f.name.match(/menujd-registro-([a-z0-9]+)-/i) || [])[1];
+    let note = "";
+    if (target && PROFILES[target] && target !== profile.id) {
+      switchProfile(target); show("recetas");
+      note = ` El archivo era del perfil ${PROFILES[target].label}: he cambiado a ese perfil.`;
+    } else if (!target || !PROFILES[target]) note = ` El archivo no indica de qué perfil es: se ha importado en ${profile.label}.`;
     const log = data.app === "menujd" ? data.log || {} : data;
     db = { ...db, ...log }; saveAll(db);
     let extra = "";
     if (data.app === "menujd" && data.weight) { saveWeights({ ...loadWeights(), ...data.weight }); extra += `, ${Object.keys(data.weight).length} pesos`; }
     if (data.app === "menujd" && data.prices) { prices = { ...prices, ...data.prices }; savePrices(); extra += ", precios"; }
-    $("#backupMsg").textContent = `Importados ${Object.keys(log).length} días${extra}.`;
+    $("#backupMsg").textContent = `Importados ${Object.keys(log).length} días${extra} en ${profile.label}.${note}`;
+    toast(`Importado en ${profile.label}`, 3000);
   } catch { $("#backupMsg").textContent = "Ese archivo no es una copia válida del registro."; }
   e.target.value = "";
 });
@@ -982,7 +998,7 @@ $("#healthWeek").addEventListener("click", () => {
   runHealthSync(weekStart, to, () => renderSemana());
 });
 
-const APP_VERSION = "v9"; // igual que CACHE en sw.js
+const APP_VERSION = "v10"; // igual que CACHE en sw.js
 $("#appVersion").textContent = "Versión de la app: " + APP_VERSION;
 
 /* arranque */

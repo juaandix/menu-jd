@@ -10,6 +10,9 @@ Idioma de la interfaz y del código de cara al usuario: español de España.
 - `builder` (opcional): `{ main: ["D","C","N"], snackSlot: "S" }`. Solo lo define JD — habilita la sección "Monta tu día" en Menú; si un perfil no lo define, esa sección se oculta.
 - `calendar` (opcional): `{ enabled: true }`. Solo lo define JD — habilita el botón 📅 de Google Calendar en Hoy; si un perfil no lo define, el botón y la sección de ajustes de calendario en Recetas se ocultan.
 - `defaultType(date)` (opcional): tipo de día propuesto para una fecha sin registro aún. Si no se define, se usa `dayTypes[0].id`.
+- Enlace `?perfil=<id>` (o el nombre, p. ej. `?perfil=cristina`): fija ese perfil como activo al abrir y limpia la URL; sirve para instalar la app en el móvil de otra persona ya en su perfil.
+- La importación de copias va siempre al perfil del archivo (`profile` en v2, o el id del nombre `menujd-registro-<id>-…json` en v1), cambiando de perfil si hace falta; si el archivo no lo indica, va al perfil activo y se avisa.
+- Los datos no se comparten entre móviles: cada dispositivo tiene su propio localStorage (se pasan con exportar/importar).
 - Nuevo perfil = añadir una entrada a `PROFILES` con esa forma; no hace falta tocar `app.js`.
 
 ## Perfil "jd" — Juan David
