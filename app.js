@@ -78,6 +78,7 @@ function renderHoy() {
   $("#dayType").value = type.id;
   $("#gcalDetect").hidden = !profile.calendar;
   $("#healthDay").hidden = !profile.health;
+  renderHealthStatus();
 
   const t = totals(day.items);
   const adj = stepAdjust(day, type, key);
@@ -602,6 +603,7 @@ function switchProfile(id) {
   renderProfileSelect();
   renderMenu(); renderRecetas();
   show("hoy");
+  autoHealth();
 }
 $("#profileSelect").addEventListener("change", (e) => switchProfile(e.target.value));
 
@@ -901,8 +903,57 @@ async function syncHealth(from, to) {
     weights = await healthWeights(tok, start, end);
     if (Object.keys(weights).length) saveWeights({ ...loadWeights(), ...weights });
   }
+  setHealthLast();
   return { steps, weights, weightAllowed: tok.weight };
 }
+
+/* actualización automática: al abrir la app o volver a ella, si los datos tienen más de 3 h.
+   Sin servidor no hay segundo plano, y Google solo da un token nuevo tras una pulsación (ventana emergente):
+   si el token de la sesión sigue vivo (1 h) se actualiza en silencio; si no, el botón ⟳ Fitbit se resalta. */
+const HEALTH_AUTO_MS = 3 * 3600e3;
+function healthLastKey() { return `menujd.ghealth.last.${profile.id}.v1`; }
+function healthLast() { try { return +localStorage.getItem(healthLastKey()) || 0; } catch { return 0; } }
+function setHealthLast() { try { localStorage.setItem(healthLastKey(), String(Date.now())); } catch {} }
+function healthStale() {
+  const last = healthLast();
+  return Date.now() - last > HEALTH_AUTO_MS || iso(new Date(last)) !== iso(new Date());
+}
+function renderHealthStatus() {
+  const el = $("#healthStatus");
+  if (!profile.health) { el.hidden = true; $("#healthDay").classList.remove("stale"); return; }
+  const last = healthLast();
+  const stale = healthStale();
+  $("#healthDay").classList.toggle("stale", stale);
+  let when = "nunca";
+  if (last) {
+    const d = new Date(last), hm = d.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" });
+    const today = iso(new Date()), y = new Date(); y.setDate(y.getDate() - 1);
+    when = iso(d) === today ? `hoy a las ${hm}` : iso(d) === iso(y) ? `ayer a las ${hm}` : d.toLocaleDateString("es-ES", { day: "numeric", month: "short" }) + ` a las ${hm}`;
+  }
+  el.textContent = `Fitbit: última actualización ${when}.${stale ? " Toca ⟳ Fitbit para actualizar." : ""}`;
+  el.hidden = false;
+}
+let healthAutoBusy = false;
+async function autoHealth() {
+  if (!profile.health || healthAutoBusy) return;
+  renderHealthStatus();
+  const tok = healthToken();
+  if (!healthStale() || !navigator.onLine || !tok || tok.exp < Date.now() + 60000) return;
+  healthAutoBusy = true;
+  try {
+    // Últimos 3 días: así se cierran también los pasos de ayer.
+    const from = new Date(); from.setDate(from.getDate() - 2);
+    const to = new Date(); to.setDate(to.getDate() + 1);
+    await syncHealth(from, to);
+    const visible = document.querySelector(".view:not([hidden])");
+    if (visible && visible.id === "view-hoy") renderHoy();
+    if (visible && visible.id === "view-semana") renderSemana();
+    toast("Fitbit actualizado");
+  } catch { /* en silencio: el botón queda resaltado para hacerlo a mano */ }
+  finally { healthAutoBusy = false; renderHealthStatus(); }
+}
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") autoHealth(); });
+window.addEventListener("online", autoHealth);
 async function runHealthSync(from, to, onDone) {
   if (!profile.health) return;
   try {
@@ -917,8 +968,10 @@ async function runHealthSync(from, to, onDone) {
   }
 }
 $("#healthDay").addEventListener("click", () => {
+  // El día abierto y los dos anteriores (para cerrar los pasos de ayer si se abre por la mañana).
+  const from = new Date(current); from.setDate(from.getDate() - 2);
   const to = new Date(current); to.setDate(to.getDate() + 1);
-  runHealthSync(current, to, (r) => {
+  runHealthSync(from, to, (r) => {
     renderHoy();
     const key = iso(current);
     if (r.steps[key] != null && key === iso(new Date())) setTimeout(() => toast(`Hoy: ${r.steps[key].toLocaleString("es-ES")} pasos hasta ahora · vuelve a sincronizar por la noche`), 2100);
@@ -929,12 +982,13 @@ $("#healthWeek").addEventListener("click", () => {
   runHealthSync(weekStart, to, () => renderSemana());
 });
 
-const APP_VERSION = "v8"; // igual que CACHE en sw.js
+const APP_VERSION = "v9"; // igual que CACHE en sw.js
 $("#appVersion").textContent = "Versión de la app: " + APP_VERSION;
 
 /* arranque */
 renderProfileSelect();
 initGcalSettings();
 renderMenu(); renderRecetas(); renderHoy();
+autoHealth();
 if ("serviceWorker" in navigator) window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
 $("#toast").addEventListener("click", () => ($("#toast").hidden = true));

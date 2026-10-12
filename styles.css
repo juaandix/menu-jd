@@ -156,6 +156,7 @@ input[type=text],input[type=number],input[type=search],input[type=date]{width:10
 .steps-row p{margin:0}
 .steps-line{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:end}
 .steps-line .btn{padding:10px 14px;min-height:44px}
+.steps-line .btn.stale{background:var(--accent);color:var(--accent-fg);border-color:var(--accent)}
 .macros .cost{color:var(--accent);font-weight:600}
 
 /* semana */

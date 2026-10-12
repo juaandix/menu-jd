@@ -134,7 +134,9 @@ tarta de queso (1/6)    166  14.9   5.3  8.1   # por porción
 - `include_granted_scopes: false` en los dos token clients: si no, GIS mezcla el permiso del calendario en el token de Health y la API responde 403 `DISALLOWED_OAUTH_SCOPES`.
 - Pasos: `POST https://health.googleapis.com/v4/users/me/dataTypes/steps/dataPoints:dailyRollUp` con `range` civil (fecha local, intervalo cerrado-abierto) y `windowSizeDays: 1`; se lee `rollupDataPoints[].steps.countSum` (string) y `civilStartTime.date`. Se guarda en `day.steps` (sobrescribe lo escrito a mano).
 - Peso: `GET .../weight/dataPoints?filter=weight.sample_time.physical_time >= "…Z" AND … < "…Z"`; `dataPoints[].weight.weightGrams` y `sampleTime.{physicalTime, utcOffset}`; se guarda el último de cada día local en `menujd.weight.<id>.v1`.
-- Implementado según la documentación oficial y probado con respuestas simuladas; pendiente de confirmar con la cuenta real (CORS desde el navegador incluido). Si fallase el CORS, la alternativa es un backend.
+- Actualización automática (`autoHealth()`): al arrancar, al volver la app a primer plano (`visibilitychange`) y al recuperar conexión, si la última sincronización (`localStorage["menujd.ghealth.last.<id>.v1"]`) tiene más de 3 h o es de otro día, trae los últimos 3 días **solo si el token de la sesión sigue vivo**; sin token no se puede pedir otro sin pulsación (GIS abre ventana emergente), así que el botón ⟳ Fitbit se resalta y Hoy muestra "última actualización…". Sin servidor no hay sincronización en segundo plano (iOS no lo permite a una PWA).
+- El botón de Hoy sincroniza el día abierto y los dos anteriores.
+- Confirmado funcionando con la cuenta real de JD desde el iPhone (12/10/2026).
 
 ## Requisitos de plataforma
 - iOS: Safari 16.4+, metas `apple-mobile-web-app-*` y `apple-touch-icon`. Nada de APIs no soportadas en iOS (Web Bluetooth, Background Sync…).
