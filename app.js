@@ -717,6 +717,7 @@ async function ensureGcalToken() {
     gcalTokenClient = google.accounts.oauth2.initTokenClient({
       client_id: cfg.clientId,
       scope: "https://www.googleapis.com/auth/calendar.readonly",
+      include_granted_scopes: false,
       callback: (resp) => {
         if (resp.error) return reject(new Error(resp.error));
         saveGcalToken({ token: resp.access_token, exp: Date.now() + resp.expires_in * 1000 });
@@ -780,7 +781,7 @@ const HEALTH_SCOPES = {
   steps: "https://www.googleapis.com/auth/googlehealth.activity_and_fitness.readonly",
   weight: "https://www.googleapis.com/auth/googlehealth.health_metrics_and_measurements.readonly",
 };
-function healthTokKey() { return `menujd.ghealth.tok.${profile.id}.v1`; }
+function healthTokKey() { return `menujd.ghealth.tok.${profile.id}.v2`; }
 function healthToken() { try { return JSON.parse(sessionStorage.getItem(healthTokKey())); } catch { return null; } }
 function clearHealthToken() { try { sessionStorage.removeItem(healthTokKey()); } catch {} }
 async function ensureHealthToken() {
@@ -793,9 +794,13 @@ async function ensureHealthToken() {
     const client = google.accounts.oauth2.initTokenClient({
       client_id: cfg.clientId,
       scope: Object.values(HEALTH_SCOPES).join(" "),
+      // Sin mezclar permisos ya concedidos (calendario): la Health API rechaza tokens con scopes ajenos (403 DISALLOWED_OAUTH_SCOPES).
+      include_granted_scopes: false,
       callback: (resp) => {
         if (resp.error) return reject(new Error(resp.error === "access_denied" ? "Google denegó el acceso (¿tu cuenta está en usuarios de prueba?)" : resp.error));
         const has = (s) => google.accounts.oauth2.hasGrantedAllScopes(resp, s);
+        const extra = String(resp.scope || "").split(" ").filter((x) => x && !x.includes("googlehealth"));
+        if (extra.length) console.warn("Token de Google Health con permisos ajenos:", extra);
         if (!has(HEALTH_SCOPES.steps)) return reject(new Error("Sin permiso para leer los pasos: márcalo al conectar."));
         const t = { token: resp.access_token, exp: Date.now() + resp.expires_in * 1000, weight: has(HEALTH_SCOPES.weight) };
         try { sessionStorage.setItem(healthTokKey(), JSON.stringify(t)); } catch {}

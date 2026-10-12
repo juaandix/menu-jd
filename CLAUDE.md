@@ -129,8 +129,9 @@ tarta de queso (1/6)    166  14.9   5.3  8.1   # por porción
 
 ## Integración opcional con Google Health (Fitbit)
 - Solo en perfiles con `health: { enabled: true }` (hoy, solo JD, que usa un Fitbit Air). Botones "⟳ Fitbit" en Hoy (día abierto) y "⟳ Traer pasos y peso de Fitbit" en Semana (los 7 días, nunca días futuros).
-- API: Google Health API v4 (la Fitbit Web API antigua se apaga el 30/10/2026). Mismo Client ID y mismo script GIS que el calendario, pero token aparte en `sessionStorage["menujd.ghealth.tok.<id>.v1"]` = `{ token, exp, weight }`.
+- API: Google Health API v4 (la Fitbit Web API antigua se apaga el 30/10/2026). Mismo Client ID y mismo script GIS que el calendario, pero token aparte en `sessionStorage["menujd.ghealth.tok.<id>.v2"]` = `{ token, exp, weight }`.
 - Permisos: `googlehealth.activity_and_fitness.readonly` (pasos, obligatorio) y `googlehealth.health_metrics_and_measurements.readonly` (peso, opcional: si no se concede, se salta el peso). Son permisos restringidos: la app de Google Cloud debe seguir en modo "Prueba" con la cuenta del usuario en "Usuarios de prueba".
+- `include_granted_scopes: false` en los dos token clients: si no, GIS mezcla el permiso del calendario en el token de Health y la API responde 403 `DISALLOWED_OAUTH_SCOPES`.
 - Pasos: `POST https://health.googleapis.com/v4/users/me/dataTypes/steps/dataPoints:dailyRollUp` con `range` civil (fecha local, intervalo cerrado-abierto) y `windowSizeDays: 1`; se lee `rollupDataPoints[].steps.countSum` (string) y `civilStartTime.date`. Se guarda en `day.steps` (sobrescribe lo escrito a mano).
 - Peso: `GET .../weight/dataPoints?filter=weight.sample_time.physical_time >= "…Z" AND … < "…Z"`; `dataPoints[].weight.weightGrams` y `sampleTime.{physicalTime, utcOffset}`; se guarda el último de cada día local en `menujd.weight.<id>.v1`.
 - Implementado según la documentación oficial y probado con respuestas simuladas; pendiente de confirmar con la cuenta real (CORS desde el navegador incluido). Si fallase el CORS, la alternativa es un backend.
