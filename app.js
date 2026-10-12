@@ -15,7 +15,15 @@ const PROFILE_KEY = "menujd.profile.v1";
 })();
 let profile = PROFILES[localStorage.getItem(PROFILE_KEY)] || PROFILES.jd;
 let ALL, byId, slotOf;
+// Platos modificados con el editor (por perfil): { "D1": { i:[...], k, p, c, f } } sustituyen al plato original de data.js.
+function dishesKey() { return `menujd.dishes.${profile.id}.v1`; }
+function loadDishOverrides() { try { return JSON.parse(localStorage.getItem(dishesKey())) || {}; } catch { return {}; } }
+function saveDishOverrides(ov) { try { localStorage.setItem(dishesKey(), JSON.stringify(ov)); } catch { toast("No se pudo guardar en este dispositivo"); } }
 function rebuildIndex() {
+  if (!profile._baseMenu) profile._baseMenu = profile.menu;
+  const ov = loadDishOverrides();
+  profile.menu = Object.fromEntries(Object.entries(profile._baseMenu).map(([slot, arr]) =>
+    [slot, arr.map((o) => (ov[o.id] ? { ...o, ...ov[o.id], mod: true } : o))]));
   ALL = Object.values(profile.menu).flat();
   byId = (id) => ALL.find((o) => o.id === id);
   slotOf = (id) => Object.keys(profile.menu).find((k) => profile.menu[k].some((o) => o.id === id));
@@ -246,29 +254,51 @@ function qtyVal(s) {
   return nums.reduce((a, b) => a + b, 0) / nums.length;
 }
 const parseCache = new Map();
+// Productos propios (Mis productos): { key, n, nut:[kcal,P,C,G] por 100 g, g?: gramos por unidad }. Comunes a todos los perfiles.
+function productsKey() { return "menujd.products.v1"; }
+function userProducts() { try { return JSON.parse(localStorage.getItem(productsKey())) || []; } catch { return []; } }
+function saveProducts(list) { try { localStorage.setItem(productsKey(), JSON.stringify(list)); } catch { toast("No se pudo guardar en este dispositivo"); } parseCache.clear(); }
+function productEntry(p) { return { key: p.key, n: p.n, u: "g", g: p.g || null, nut: p.nut, w: p.n, cat: "Mis productos", user: true }; }
+function catalog() { return [...userProducts().map(productEntry), ...SHOP]; }
+// Devuelve { c, qty (unidad de compra), grams (peso tal como se escribe), cooked, nut (por 100 g), raw }.
 function parseIng(raw) {
   if (parseCache.has(raw)) return parseCache.get(raw);
   const t = norm(raw);
-  const c = SHOP.find((x) => x.re.test(t)) || null;
+  const own = userProducts().find((p) => t.includes(norm(p.n)));
+  const c = own ? productEntry(own) : SHOP.find((x) => x.re.test(t)) || null;
   let amount = null, unit = null; // unit: "g" | "ml" | null (= unidades)
   const lead = t.match(new RegExp("^" + QTY + "\\s*(g|ml)?\\b"));
+  let parenG = null;
   if (lead) {
     amount = qtyVal(lead[1]); unit = lead[2] || null;
-    if (!unit) { const pg = t.match(new RegExp("\\([^)]*?" + QTY + "\\s*g\\b")); if (pg && c && c.u !== "ud") { amount = qtyVal(pg[1]); unit = "g"; } }
+    if (!unit) { const pg = t.match(new RegExp("\\([^)]*?" + QTY + "\\s*g\\b")); if (pg) parenG = qtyVal(pg[1]); }
+    if (!unit && parenG != null && c && c.u !== "ud") { amount = parenG; unit = "g"; }
   } else {
     const any = t.match(new RegExp(QTY + "\\s*(g|ml)\\b"));
     if (any) { amount = qtyVal(any[1]); unit = any[2]; }
   }
-  let qty = null;
+  let qty = null, grams = null;
+  const cooked = !!(c && c.cooked && c.cooked.re.test(t));
   if (c && amount != null) {
     if (c.u === "ud") qty = unit ? (c.g ? amount / c.g : null) : amount;
     else if (c.u === "ml") qty = unit === "ml" ? amount : unit === "g" ? amount / (c.dens || 1) : null;
     else qty = unit ? amount : (c.g ? amount * c.g : null);
-    if (qty != null && c.cooked && c.cooked.re.test(t)) qty *= c.cooked.f;
+    if (qty != null && cooked) qty *= c.cooked.f;
+    if (unit === "g") grams = amount;
+    else if (unit === "ml") grams = amount * (c.dens || 1);
+    else grams = parenG != null ? parenG : c.g ? amount * c.g : null;
   }
-  const res = { c, qty, raw };
+  const nut = c ? (cooked ? c.cooked.nut : c.nut) || null : null;
+  const res = { c, qty, grams, cooked, nut, raw };
   parseCache.set(raw, res);
   return res;
+}
+// Macros de una línea de ingrediente: { k, p, c, f } o null si no se pueden calcular.
+function ingMacros(raw) {
+  const { grams, nut } = parseIng(raw);
+  if (grams == null || !nut) return null;
+  const x = grams / 100;
+  return { k: nut[0] * x, p: nut[1] * x, c: nut[2] * x, f: nut[3] * x };
 }
 function pricesKey() { return "menujd.prices.v1"; }
 function loadPrices() { try { return JSON.parse(localStorage.getItem(pricesKey())) || {}; } catch { return {}; } }
@@ -304,11 +334,11 @@ function itemDishCost(x) {
 
 /* ---------- MENÚ ---------- */
 function cardHTML(o, addable = true) {
-  return `<article class="card"><h3><span class="code">${o.id}</span>${o.n}</h3>
+  return `<article class="card"><h3><span class="code">${o.id}</span>${o.n}${o.mod ? `<span class="mod-tag">modificado</span>` : ""}</h3>
     <ul>${o.i.map((x) => `<li>${x}</li>`).join("")}</ul>
     ${o.t ? `<p class="tip">${o.t}</p>` : ""}
     <div class="macros"><span><b>${o.k}</b> kcal</span><span>P <b>${r0(o.p)}</b></span><span>C ${r0(o.c)}</span><span>G ${r0(o.f)}</span>${costLabel(dishCost(o)) ? `<span class="cost">${costLabel(dishCost(o))}</span>` : ""}
-    ${addable ? `<button class="add-btn" data-quick="${o.id}">+ Hoy</button>` : ""}</div></article>`;
+    ${addable ? `<span class="card-btns"><button class="add-btn edit-btn" data-edit="${o.id}" aria-label="Cambiar ingredientes de ${esc(o.n)}">✎ Cambiar</button><button class="add-btn" data-quick="${o.id}">+ Hoy</button></span>` : ""}</div></article>`;
 }
 let avgS = {};
 function renderMenuList() {
@@ -346,12 +376,168 @@ function updBuilder() {
     <div><small>vs objetivo</small><strong class="${Math.abs(diff) <= 60 ? "ok" : "off"}">${diff > 0 ? "+" : ""}${diff}</strong></div>`;
 }
 
+/* ---------- EDITOR DE PLATOS: cambiar, quitar o añadir ingredientes ---------- */
+// Los macros del plato se ajustan por diferencia (se resta lo que se quita y se suma lo que se pone),
+// así el resto del plato conserva sus valores originales (etiquetas reales en JD, estimaciones en Cristina).
+let ed = null;
+const fmtG = (g) => String(Math.round(g)).replace(".", ",");
+const addM = (a, b, sign = 1) => ({ k: a.k + sign * b.k, p: a.p + sign * b.p, c: a.c + sign * b.c, f: a.f + sign * b.f });
+function macrosTxt(m) { return `${r0(m.k)} kcal · P ${r1(m.p)} · C ${r0(m.c)} · G ${r0(m.f)}`; }
+function bandStatus(slotId, m) {
+  const t = (profile.slots.find((s) => s.id === slotId) || {}).target;
+  if (!t) return "";
+  const out = [];
+  const dk = m.k - t.k;
+  if (Math.abs(dk) > 15) out.push(`${dk > 0 ? "+" : ""}${r0(dk)} kcal`);
+  if (t.p != null) { const dp = m.p - t.p; if (Math.abs(dp) > 3) out.push(`${dp > 0 ? "+" : ""}${r1(dp)} g P`); }
+  else if (m.p < t.pMin || m.p > t.pMax) out.push(`proteína fuera de ${t.pMin}–${t.pMax} g`);
+  return out.length ? `<p class="band off">Fuera de la franja (${t.k} kcal): ${out.join(", ")}</p>` : `<p class="band ok">Dentro de la franja ✓</p>`;
+}
+function openEditor(id) {
+  const o = byId(id), slot = slotOf(id);
+  ed = { id, slot, n: o.n, i: [...o.i], m: { k: o.k, p: o.p, c: o.c, f: o.f }, base: profile._baseMenu[slot].find((x) => x.id === id) };
+  $("#sheetTitle").textContent = "Cambiar · " + o.n;
+  renderEditor();
+  $("#sheet").hidden = false; $("#sheetBg").hidden = false;
+}
+function renderEditor() {
+  const b = ed.base;
+  const changed = ed.i.join("\n") !== b.i.join("\n") || ed.n.trim() !== b.n;
+  $("#sheetBody").innerHTML = `
+    <label for="edName">Nombre del plato<input type="text" id="edName" value="${esc(ed.n)}" autocomplete="off"></label>
+    <div class="ed-list">${ed.i.map((raw, idx) => {
+      const m = ingMacros(raw);
+      return `<div class="ed-row"><div class="ed-name"><b>${esc(raw)}</b><small>${m ? `${r0(m.k)} kcal · ${r1(m.p)} g P` : "sin macros (no se puede cambiar)"}</small></div>
+        ${m ? `<button class="chip-opt" data-ed-change="${idx}">Cambiar</button><button class="del" data-ed-remove="${idx}" aria-label="Quitar ${esc(raw)}">✕</button>` : ""}</div>`;
+    }).join("")}</div>
+    <button class="btn ghost" data-ed-add="1">＋ Añadir ingrediente</button>
+    <div class="ed-total">
+      <div><small>Ahora</small><b>${macrosTxt(ed.m)}</b></div>
+      ${changed || byId(ed.id).mod ? `<div><small>Original</small><span>${macrosTxt(b)}</span></div>` : ""}
+      ${bandStatus(ed.slot, ed.m)}
+    </div>
+    <div class="row">
+      <button class="btn" data-ed-save="1">Guardar plato</button>
+      ${byId(ed.id).mod ? `<button class="btn ghost" data-ed-reset="1">Restaurar original</button>` : ""}
+    </div>
+    <p class="muted small">El cambio se guarda en este móvil y se usa al registrar, en Monta tu día, la lista de la compra y los costes. Lo ya registrado no cambia.</p>`;
+  $("#edName").addEventListener("input", (e) => { ed.n = e.target.value; });
+}
+// Opciones del buscador: cada entrada del catálogo con macros (y su versión cocinada si la tiene) + Mis productos.
+function foodOptions() {
+  const out = [];
+  for (const c of catalog()) {
+    if (c.nut) out.push({ id: c.key + "|0", c, cooked: false, label: c.n, nut: c.nut });
+    if (c.cooked && c.cooked.nut) out.push({ id: c.key + "|1", c, cooked: true, label: c.cooked.w.charAt(0).toUpperCase() + c.cooked.w.slice(1), nut: c.cooked.nut });
+  }
+  return out;
+}
+function openPicker(idx) {
+  ed.idx = idx; ed.q = "";
+  const old = idx != null ? ed.i[idx] : null;
+  $("#sheetBody").innerHTML = `
+    <button class="back-link" type="button" data-ed-back="1">‹ Volver al plato</button>
+    ${old ? `<p class="muted small">Cambiar <b>${esc(old)}</b> por…</p>` : `<p class="muted small">Añadir al plato…</p>`}
+    <input type="search" id="edSearch" placeholder="Buscar ingrediente…" autocomplete="off">
+    <div id="edOptions" class="ed-options"></div>
+    <details class="ed-new"><summary>¿No está? Crear producto con sus macros</summary>
+      <form id="prodForm" class="custom">
+        <input type="text" id="prName" placeholder="Nombre (p. ej. skyr natural Hacendado)" required>
+        <p class="muted small">Valores por 100 g (de la etiqueta):</p>
+        <div class="grid4">
+          <label for="prK">kcal<input type="text" inputmode="decimal" id="prK" required></label>
+          <label for="prP">Prot.<input type="text" inputmode="decimal" id="prP" value="0"></label>
+          <label for="prC">Carb.<input type="text" inputmode="decimal" id="prC" value="0"></label>
+          <label for="prF">Grasa<input type="text" inputmode="decimal" id="prF" value="0"></label>
+        </div>
+        <label for="prG">Peso de una unidad en g (opcional)<input type="text" inputmode="decimal" id="prG" placeholder="p. ej. 125"></label>
+        <button class="btn" type="submit">Crear y usar</button>
+      </form>
+    </details>`;
+  renderPickerOptions();
+  $("#edSearch").addEventListener("input", (e) => { ed.q = e.target.value; renderPickerOptions(); });
+}
+function renderPickerOptions() {
+  const q = norm(ed.q || "");
+  const list = foodOptions().filter((o) => !q || norm(o.label).includes(q) || norm(o.cooked ? o.c.cooked.w : o.c.w || "").includes(q));
+  $("#edOptions").innerHTML = list.length
+    ? list.map((o) => `<button class="opt" data-ed-pick="${o.id}"><span>${esc(o.label)}</span><span class="kc">${r0(o.nut[0])} kcal<br>${r1(o.nut[1])} g P</span></button>`).join("")
+    : `<p class="empty">Nada con "${esc(ed.q)}". Créalo abajo con sus macros.</p>`;
+}
+function openGrams(optId) {
+  const o = foodOptions().find((x) => x.id === optId);
+  if (!o) return;
+  ed.pick = o;
+  const old = ed.idx != null ? parseIng(ed.i[ed.idx]) : null;
+  ed.grams = (old && old.grams) || o.c.g || 100;
+  $("#sheetBody").innerHTML = `
+    <button class="back-link" type="button" data-ed-back-pick="1">‹ Elegir otro ingrediente</button>
+    <div class="portion-card">
+      <p><b>${esc(o.label)}</b> <span class="muted small">(${r0(o.nut[0])} kcal · ${r1(o.nut[1])} g P por 100 g)</span></p>
+      <label for="edGrams">Gramos${o.c.g ? ` (1 unidad ≈ ${o.c.g} g)` : ""}<input type="text" inputmode="decimal" id="edGrams" value="${fmtG(ed.grams)}"></label>
+      <div id="edPreview"></div>
+      <div class="row">
+        ${old && ingMacros(ed.i[ed.idx]) && o.nut[0] > 0 ? `<button class="btn ghost" data-ed-match="1">Igualar kcal</button>` : ""}
+        <button class="btn" data-ed-apply="1">${ed.idx != null ? "Cambiar" : "Añadir"}</button>
+      </div>
+    </div>`;
+  $("#edGrams").addEventListener("input", (e) => { ed.grams = parseFloat(e.target.value.replace(",", ".")) || 0; renderGramsPreview(); });
+  renderGramsPreview();
+}
+function pickText() {
+  const o = ed.pick, w = o.cooked ? o.c.cooked.w : o.c.w;
+  const units = o.c.g && o.c.u === "ud" ? ` (≈${r1(ed.grams / o.c.g).toString().replace(".", ",")} ud)` : "";
+  return `${fmtG(ed.grams)} g de ${w}${units}`;
+}
+function pickDelta() {
+  const newM = ingMacros(pickText());
+  const oldM = ed.idx != null ? ingMacros(ed.i[ed.idx]) : { k: 0, p: 0, c: 0, f: 0 };
+  return newM && oldM ? { newM, oldM, total: addM(addM(ed.m, oldM, -1), newM) } : null;
+}
+function renderGramsPreview() {
+  const d = ed.grams > 0 ? pickDelta() : null;
+  $("#edPreview").innerHTML = d ? `
+    <p class="muted small">Este ingrediente: ${r0(d.newM.k)} kcal · ${r1(d.newM.p)} g P${ed.idx != null ? ` (antes ${r0(d.oldM.k)} kcal · ${r1(d.oldM.p)} g P)` : ""}</p>
+    <p class="ed-sum">Plato: <b>${macrosTxt(d.total)}</b></p>${bandStatus(ed.slot, d.total)}` : `<p class="empty">Pon los gramos.</p>`;
+}
+function applyPick() {
+  const d = ed.grams > 0 ? pickDelta() : null;
+  if (!d) { toast("Revisa los gramos"); return; }
+  const txt = pickText();
+  if (ed.idx != null) ed.i[ed.idx] = txt; else ed.i.push(txt);
+  ed.m = d.total;
+  renderEditor();
+}
+function saveEditor() {
+  const ov = loadDishOverrides();
+  const n = ed.n.trim() || ed.base.n;
+  if (ed.i.join("\n") === ed.base.i.join("\n") && n === ed.base.n) delete ov[ed.id];
+  else ov[ed.id] = { n, i: ed.i, k: r0(ed.m.k), p: r1(ed.m.p), c: r1(ed.m.c), f: r1(ed.m.f) };
+  saveDishOverrides(ov);
+  afterDishChange(); closeSheet(); toast("Plato guardado");
+}
+function resetDish() {
+  const ov = loadDishOverrides(); delete ov[ed.id]; saveDishOverrides(ov);
+  afterDishChange(); closeSheet(); toast("Plato restaurado");
+}
+function afterDishChange() {
+  parseCache.clear(); rebuildIndex(); renderMenuList();
+  if (profile.builder) updBuilder();
+}
+function renderProducts() {
+  const list = userProducts();
+  $("#productList").innerHTML = list.length
+    ? list.map((p) => `<li><span><b>${esc(p.n)}</b><small>${p.nut[0]} kcal · P ${p.nut[1]} · C ${p.nut[2]} · G ${p.nut[3]} /100 g${p.g ? ` · ${p.g} g/ud` : ""}</small></span><button class="del" data-prod-del="${p.key}" aria-label="Borrar ${esc(p.n)}">✕</button></li>`).join("")
+    : `<li class="empty">Aún no hay ninguno. Se crean desde ✎ Cambiar en un plato del Menú.</li>`;
+}
+
 /* ---------- RECETAS ---------- */
 function renderRecetas() {
   $("#recipeList").innerHTML = profile.recipes.map((x) => `<article class="card"><h3><span class="code">${x.tag}</span>${x.n}</h3>
     <ul>${x.i.map((i) => `<li>${i}</li>`).join("")}</ul><ol>${x.s.map((i) => `<li>${i}</li>`).join("")}</ol>
     <div class="macros"><span>${x.m}</span></div></article>`).join("");
   $("#notes").innerHTML = profile.notes.map((n) => `<li>${n}</li>`).join("");
+  renderProducts();
   $("#gcalSection").hidden = !profile.calendar && !profile.health;
   $("#healthHelp").hidden = !profile.health;
 }
@@ -470,7 +656,7 @@ function renderWeight() {
 }
 
 /* lista de la compra */
-const SHOP_CATS = ["Fruta y verdura", "Carne y pescado", "Charcutería", "Huevos", "Lácteos", "Panadería", "Despensa", "Caseros"];
+const SHOP_CATS = ["Fruta y verdura", "Carne y pescado", "Charcutería", "Huevos", "Lácteos", "Panadería", "Despensa", "Caseros", "Mis productos"];
 function shopCheckKey() { return `menujd.shopcheck.${profile.id}.v1`; }
 function loadChecks() { try { return JSON.parse(localStorage.getItem(shopCheckKey())) || {}; } catch { return {}; } }
 function saveChecks(all) {
@@ -539,10 +725,11 @@ function shopText() {
 function renderPrices() {
   const used = new Set();
   ALL.forEach((o) => o.i.forEach((raw) => { const { c } = parseIng(raw); if (c) used.add(c.key); }));
+  userProducts().forEach((p) => used.add(p.key));
   const unit = { g: "€/kg", ml: "€/l", ud: "€/ud" };
   const box = $("#priceList");
   if (box.contains(document.activeElement)) return; // no repintar mientras se escribe
-  box.innerHTML = SHOP.filter((c) => used.has(c.key)).sort((a, b) => a.n.localeCompare(b.n, "es")).map((c) => `
+  box.innerHTML = catalog().filter((c) => used.has(c.key)).sort((a, b) => a.n.localeCompare(b.n, "es")).map((c) => `
     <label class="price-item"><span>${esc(c.n)}</span>
       <span class="price-in"><input type="text" inputmode="decimal" data-price="${c.key}" value="${prices[c.key] != null ? String(prices[c.key]).replace(".", ",") : ""}" placeholder="—" aria-label="Precio de ${esc(c.n)} en ${unit[c.u]}"><small>${unit[c.u]}</small></span></label>`).join("");
 }
@@ -589,6 +776,7 @@ function show(view) {
   if (view === "hoy") renderHoy();
   if (view === "menu") { renderMenuList(); updApplyLabel(); }
   if (view === "semana") renderSemana();
+  if (view === "recetas") renderProducts();
   window.scrollTo(0, 0);
 }
 let toastT;
@@ -633,6 +821,29 @@ document.addEventListener("click", (e) => {
     closeSheet(); toast("Añadido: " + o.n + suffix);
   }
   else if (b.dataset.pick) { openPortionStep(b.dataset.pick); }
+  else if (b.dataset.edit) openEditor(b.dataset.edit);
+  else if (b.dataset.edChange) openPicker(+b.dataset.edChange);
+  else if (b.dataset.edAdd) openPicker(null);
+  else if (b.dataset.edRemove) {
+    const m = ingMacros(ed.i[+b.dataset.edRemove]);
+    if (!m) { toast("No tengo los macros de ese ingrediente"); return; }
+    ed.m = addM(ed.m, m, -1); ed.i.splice(+b.dataset.edRemove, 1); renderEditor();
+  }
+  else if (b.dataset.edBack) renderEditor();
+  else if (b.dataset.edBackPick) openPicker(ed.idx);
+  else if (b.dataset.edPick) openGrams(b.dataset.edPick);
+  else if (b.dataset.edMatch) {
+    const oldM = ingMacros(ed.i[ed.idx]);
+    ed.grams = Math.max(5, Math.round(oldM.k / (ed.pick.nut[0] / 100) / 5) * 5);
+    $("#edGrams").value = fmtG(ed.grams); renderGramsPreview();
+  }
+  else if (b.dataset.edApply) applyPick();
+  else if (b.dataset.edSave) saveEditor();
+  else if (b.dataset.edReset) resetDish();
+  else if (b.dataset.prodDel) {
+    saveProducts(userProducts().filter((p) => p.key !== b.dataset.prodDel));
+    afterDishChange(); renderProducts(); toast("Producto borrado");
+  }
   else if (b.dataset.quick) { const o = byId(b.dataset.quick); current = new Date(); current.setHours(12, 0, 0, 0); pushRecent(slotOf(o.id), o.id); addItem(slotOf(o.id), { ref: o.id, n: o.n, k: o.k, p: o.p, c: o.c, f: o.f }); toast("Añadido a hoy: " + o.n); }
 });
 $("#sheetClose").addEventListener("click", closeSheet);
@@ -640,6 +851,17 @@ $("#sheetBg").addEventListener("click", closeSheet);
 $("#sheetBody").addEventListener("submit", (e) => {
   e.preventDefault();
   const num = (id) => parseFloat($(id).value.replace(",", ".")) || 0;
+  if (e.target.id === "prodForm") {
+    const n = $("#prName").value.trim().replace(/\s+/g, " ");
+    const k = num("#prK");
+    if (!n || !(k >= 0) || !$("#prK").value.trim()) { toast("Pon al menos el nombre y las kcal"); return; }
+    const list = userProducts();
+    const same = list.find((p) => norm(p.n) === norm(n));
+    const prod = { key: same ? same.key : "u" + Date.now().toString(36), n, nut: [k, num("#prP"), num("#prC"), num("#prF")], ...(num("#prG") > 0 ? { g: num("#prG") } : {}) };
+    saveProducts([...list.filter((p) => p.key !== prod.key), prod]);
+    openGrams(prod.key + "|0");
+    return;
+  }
   addItem($("#sheetBody").dataset.slot, { n: $("#cName").value.trim(), k: num("#cK"), p: num("#cP"), c: num("#cC"), f: num("#cF") });
   closeSheet(); toast("Añadido");
 });
@@ -668,7 +890,7 @@ $("#bApply").addEventListener("click", () => {
 
 /* copia de seguridad */
 $("#exportBtn").addEventListener("click", () => {
-  const payload = { app: "menujd", version: 2, profile: profile.id, log: db, weight: loadWeights(), prices };
+  const payload = { app: "menujd", version: 2, profile: profile.id, log: db, weight: loadWeights(), prices, dishes: loadDishOverrides(), products: userProducts() };
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob); a.download = `menujd-registro-${profile.id}-${iso(new Date())}.json`;
@@ -693,6 +915,14 @@ $("#importFile").addEventListener("change", async (e) => {
     let extra = "";
     if (data.app === "menujd" && data.weight) { saveWeights({ ...loadWeights(), ...data.weight }); extra += `, ${Object.keys(data.weight).length} pesos`; }
     if (data.app === "menujd" && data.prices) { prices = { ...prices, ...data.prices }; savePrices(); extra += ", precios"; }
+    if (data.app === "menujd" && Array.isArray(data.products) && data.products.length) {
+      const keys = new Set(data.products.map((p) => p.key));
+      saveProducts([...userProducts().filter((p) => !keys.has(p.key)), ...data.products]); extra += `, ${data.products.length} productos`;
+    }
+    if (data.app === "menujd" && data.dishes && Object.keys(data.dishes).length) {
+      saveDishOverrides({ ...loadDishOverrides(), ...data.dishes }); extra += `, ${Object.keys(data.dishes).length} platos modificados`;
+    }
+    afterDishChange(); renderProducts();
     $("#backupMsg").textContent = `Importados ${Object.keys(log).length} días${extra} en ${profile.label}.${note}`;
     toast(`Importado en ${profile.label}`, 3000);
   } catch { $("#backupMsg").textContent = "Ese archivo no es una copia válida del registro."; }
@@ -998,7 +1228,7 @@ $("#healthWeek").addEventListener("click", () => {
   runHealthSync(weekStart, to, () => renderSemana());
 });
 
-const APP_VERSION = "v10"; // igual que CACHE en sw.js
+const APP_VERSION = "v11"; // igual que CACHE en sw.js
 $("#appVersion").textContent = "Versión de la app: " + APP_VERSION;
 
 /* arranque */

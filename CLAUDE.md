@@ -163,6 +163,14 @@ Probar a 390×844, añadir platos, recargar y comprobar que el registro persiste
 - "Monta tu día" añade el plan al día abierto en Hoy (no siempre a hoy), para poder planificar días futuros.
 - Copia de seguridad v2: `{ app:"menujd", version:2, profile, log, weight, prices }`; la importación acepta también el formato antiguo (objeto de días).
 
+## Editor de platos y Mis productos
+- Botón "✎ Cambiar" en cada tarjeta del Menú: cambiar, quitar o añadir ingredientes. Los macros se ajustan **por diferencia** (plato − ingrediente quitado + ingrediente nuevo), así el resto conserva sus valores originales.
+- Macros por ingrediente: `nut: [kcal, P, C, G]` por 100 g en cada entrada de `SHOP` (y `cooked.nut` para pollo/pasta/arroz cocidos). Con ellos, los platos de JD se recalculan con ~0,1 % de desviación; los de Cristina ~7 % (sus macros son estimaciones con otros valores). `w` = texto con el que se escribe el ingrediente al usarlo como sustituto (`"<g> g de <w>"`), y tiene que volver a caer en la misma entrada del catálogo (hay test de ida y vuelta).
+- Gramos por defecto al cambiar = gramos del ingrediente original (las unidades se pasan a gramos con `g` de la entrada: plátano 120 g, huevo 60 g…). "Igualar kcal" ajusta los gramos para que el plato no cambie de calorías. Si el perfil tiene `slots[].target`, se avisa de si el plato sigue en su franja (±15 kcal, ±3 g P).
+- Guardado por perfil y por móvil en `localStorage["menujd.dishes.<id>.v1"] = { "D1": { i, k, p, c, f } }`; `rebuildIndex()` lo superpone a `data.js` (original en `profile._baseMenu`). "Restaurar original" lo borra. Lo ya registrado no cambia.
+- Mis productos: `localStorage["menujd.products.v1"] = [{ key, n, nut, g? }]`, comunes a todos los perfiles; se reconocen en los ingredientes por su nombre y salen en la lista de la compra y en precios. Se crean desde el editor y se borran en Recetas.
+- La copia de seguridad incluye `dishes` (del perfil) y `products`.
+
 ## Ideas pendientes (no implementadas)
 - Sincronización entre dispositivos con backend Spring Boot + PostgreSQL.
 - Integración con Hevy (solo exporta tipo de entreno, duración y kcal estimadas).
