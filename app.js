@@ -551,6 +551,7 @@ function openPicker(idx) {
     <button class="back-link" type="button" data-ed-back="1">‹ Volver al plato</button>
     ${old ? `<p class="muted small">Cambiar <b>${esc(old)}</b> por…</p>` : `<p class="muted small">Añadir al plato…</p>`}
     <input type="search" id="edSearch" placeholder="Buscar ingrediente…" autocomplete="off">
+    <div id="edRecs"></div>
     <div id="edOptions" class="ed-options"></div>
     <details class="ed-new"><summary>¿No está? Crear producto con sus macros</summary>
       <form id="prodForm" class="custom">
@@ -569,7 +570,45 @@ function openPicker(idx) {
   renderPickerOptions();
   $("#edSearch").addEventListener("input", (e) => { ed.q = e.target.value; renderPickerOptions(); });
 }
+// Sustitutos recomendados: para cada ingrediente con macros se calculan los gramos "auto" que suplen
+// al que se cambia y se puntúa cuánto se parecen los cuatro macros (en unidades de tolerancia).
+// Así salen primero los que encajan sin descuadrar el plato (p. ej. pollo → pavo, merluza o atún).
+// Grupos afines que también valen como sustituto (para grupos con pocos ingredientes).
+const ROLE_ALSO = { dulce: ["fruta"], polvo: ["lacteo"], casero: ["lacteo", "polvo"] };
+function substitutes(raw, max = 5) {
+  const old = parseIng(raw), o = ingMacros(raw);
+  if (!o || !(o.k > 0)) return [];
+  const role = old.c && old.c.r, best = new Map();
+  for (const opt of foodOptions()) {
+    if (old.c && opt.c.key === old.c.key) continue;
+    if (!(opt.nut[0] > 0)) continue;
+    // Mismo grupo de alimento. Mis productos no tienen grupo: entran siempre, y si lo que se cambia es
+    // uno de ellos, vale cualquier grupo menos las salsas.
+    if (opt.c.r && (role ? opt.c.r !== role && !(ROLE_ALSO[role] || []).includes(opt.c.r) : opt.c.r === "salsa")) continue;
+    const g = fitGramsFor(o, opt.nut, "auto");
+    if (!g) continue;
+    const x = g / 100, n = { k: opt.nut[0] * x, p: opt.nut[1] * x, c: opt.nut[2] * x, f: opt.nut[3] * x };
+    let score = ((n.k - o.k) / 15) ** 2 + ((n.p - o.p) / 3) ** 2
+      + 0.5 * ((n.c - o.c) / Math.max(5, o.c * 0.15)) ** 2 + 0.5 * ((n.f - o.f) / Math.max(3, o.f * 0.15)) ** 2;
+    if (old.grams && (g > old.grams * 3 || g < old.grams / 3)) score += 50; // cantidades poco realistas
+    if (opt.c.u === "ud" && opt.c.g && g / opt.c.g > 6) score += 50;
+    if (old.c && opt.c.cat === old.c.cat) score *= 0.8;
+    if (opt.cooked !== old.cooked && opt.c.cooked) score += 1; // si se cambia algo cocido, mejor en cocido
+    const prev = best.get(opt.c.key); // una sola versión (seco o cocido) por ingrediente
+    if (!prev || score < prev.score) best.set(opt.c.key, { opt, g, n, score });
+  }
+  return [...best.values()].sort((a, b) => a.score - b.score).slice(0, max);
+}
+function renderRecs() {
+  const box = $("#edRecs");
+  if (!box) return;
+  const recs = ed.idx != null && !ed.q ? substitutes(ed.i[ed.idx]) : [];
+  box.innerHTML = recs.length ? `<p class="recent-label">Recomendados para sustituirlo</p>
+    <div class="ed-options">${recs.map((r) => `<button class="opt rec" data-ed-pick="${r.opt.id}"><span>${esc(r.opt.label)}<small>${fmtG(r.g)} g → ${r0(r.n.k)} kcal · ${f1(r.n.p)} g P · C ${r0(r.n.c)} · G ${r0(r.n.f)}</small></span><span class="kc">${r.score < 3 ? "encaja" : r.score < 15 ? "parecido" : "aprox."}</span></button>`).join("")}</div>
+    <p class="recent-label">Todos los ingredientes</p>` : "";
+}
 function renderPickerOptions() {
+  renderRecs();
   const q = norm(ed.q || "");
   const list = foodOptions().filter((o) => !q || norm(o.label).includes(q) || norm(o.cooked ? o.c.cooked.w : o.c.w || "").includes(q));
   $("#edOptions").innerHTML = list.length
@@ -581,20 +620,52 @@ function openGrams(optId) {
   if (!o) return;
   ed.pick = o;
   const old = ed.idx != null ? parseIng(ed.i[ed.idx]) : null;
-  ed.grams = (old && old.grams) || o.c.g || 100;
+  ed.oldM = ed.idx != null ? ingMacros(ed.i[ed.idx]) : null;
+  // Al cambiar un ingrediente se calculan solos los gramos que suplen al anterior (si los dos tienen macros).
+  ed.fit = ed.oldM && o.nut[0] > 0 ? "auto" : null;
+  ed.grams = ed.fit ? fitGrams(ed.fit) : (old && old.grams) || o.c.g || 100;
   $("#sheetBody").innerHTML = `
     <button class="back-link" type="button" data-ed-back-pick="1">‹ Elegir otro ingrediente</button>
     <div class="portion-card">
       <p><b>${esc(o.label)}</b> <span class="muted small">(${r0(o.nut[0])} kcal · ${f1(o.nut[1])} g P por 100 g)</span></p>
+      ${ed.fit ? `<div class="fit-row" role="group" aria-label="Calcular gramos para igualar">${FIT_MODES.map((f) => `<button class="chip-opt fit-btn" data-ed-fit="${f.id}">${f.label}</button>`).join("")}</div>` : ""}
       <label for="edGrams">Gramos${o.c.g ? ` (1 unidad ≈ ${o.c.g} g)` : ""}<input type="text" inputmode="decimal" id="edGrams" value="${fmtG(ed.grams)}"></label>
       <div id="edPreview"></div>
       <div class="row">
-        ${old && ingMacros(ed.i[ed.idx]) && o.nut[0] > 0 ? `<button class="btn ghost" data-ed-match="1">Igualar kcal</button>` : ""}
         <button class="btn" data-ed-apply="1">${ed.idx != null ? "Cambiar" : "Añadir"}</button>
       </div>
     </div>`;
-  $("#edGrams").addEventListener("input", (e) => { ed.grams = parseFloat(e.target.value.replace(",", ".")) || 0; renderGramsPreview(); });
+  $("#edGrams").addEventListener("input", (e) => { ed.grams = parseFloat(e.target.value.replace(",", ".")) || 0; ed.fit = ed.fit && "manual"; renderGramsPreview(); });
   renderGramsPreview();
+}
+// Cómo se calculan los gramos del sustituto. "auto" busca el mejor equilibrio entre kcal y proteína
+// pesando cada una por la tolerancia de las franjas (±15 kcal, ±3 g P): un solo ingrediente no puede
+// igualar los cuatro macros a la vez salvo que sea igual que el anterior.
+const FIT_MODES = [
+  { id: "auto", label: "Auto (kcal + proteína)" },
+  { id: "k", label: "Mismas kcal" },
+  { id: "p", label: "Misma proteína" },
+  { id: "c", label: "Mismos carbohidratos" },
+  { id: "f", label: "Misma grasa" },
+];
+function fitGrams(mode) { return fitGramsFor(ed.oldM, ed.pick.nut, mode); }
+function fitGramsFor(o, nut, mode) {
+  const [k, p, c, f] = nut.map((v) => v / 100);
+  let g;
+  if (mode === "auto") {
+    const wk = 1 / 15 ** 2, wp = 1 / 3 ** 2;
+    g = (wk * k * o.k + wp * p * o.p) / (wk * k * k + wp * p * p);
+  } else {
+    const per = { k, p, c, f }[mode];
+    g = per > 0 ? o[mode] / per : NaN;
+  }
+  return isFinite(g) && g > 0 ? Math.max(1, Math.round(g)) : 0;
+}
+function setFit(mode) {
+  const g = fitGrams(mode);
+  if (!g) { toast("El ingrediente nuevo no tiene de eso"); return; }
+  ed.fit = mode; ed.grams = g;
+  $("#edGrams").value = fmtG(g); renderGramsPreview();
 }
 function pickText() {
   const o = ed.pick, w = o.cooked ? o.c.cooked.w : o.c.w;
@@ -606,10 +677,19 @@ function pickDelta() {
   const oldM = ed.idx != null ? ingMacros(ed.i[ed.idx]) : { k: 0, p: 0, c: 0, f: 0 };
   return newM && oldM ? { newM, oldM, total: addM(addM(ed.m, oldM, -1), newM) } : null;
 }
+function fitDiff(n, o) {
+  const parts = [["k", "kcal", r0], ["p", "P", f1], ["c", "C", f1], ["f", "G", f1]].map(([key, lab, fmt]) => {
+    const d = n[key] - o[key], v = fmt(Math.abs(d));
+    return `<span class="${Math.abs(d) <= (key === "k" ? 15 : 3) ? "ok" : "off"}">${lab} ${d >= 0 ? "+" : "−"}${v}</span>`;
+  });
+  return `<p class="fit-diff">vs anterior: ${parts.join(" ")}</p>`;
+}
 function renderGramsPreview() {
   const d = ed.grams > 0 ? pickDelta() : null;
+  document.querySelectorAll(".fit-btn").forEach((b) => b.classList.toggle("on", b.dataset.edFit === ed.fit));
   $("#edPreview").innerHTML = d ? `
     <p class="muted small">Este ingrediente: ${r0(d.newM.k)} kcal · ${f1(d.newM.p)} g P${ed.idx != null ? ` (antes ${r0(d.oldM.k)} kcal · ${f1(d.oldM.p)} g P)` : ""}</p>
+    ${ed.idx != null ? fitDiff(d.newM, d.oldM) : ""}
     <p class="ed-sum">Plato: <b>${macrosTxt(d.total)}</b></p>${bandStatus(ed.slot, d.total)}` : `<p class="empty">Pon los gramos.</p>`;
 }
 function applyPick() {
@@ -981,11 +1061,7 @@ document.addEventListener("click", (e) => {
   else if (b.dataset.edBack) renderEditor();
   else if (b.dataset.edBackPick) openPicker(ed.idx);
   else if (b.dataset.edPick) openGrams(b.dataset.edPick);
-  else if (b.dataset.edMatch) {
-    const oldM = ingMacros(ed.i[ed.idx]);
-    ed.grams = Math.max(5, Math.round(oldM.k / (ed.pick.nut[0] / 100) / 5) * 5);
-    $("#edGrams").value = fmtG(ed.grams); renderGramsPreview();
-  }
+  else if (b.dataset.edFit) setFit(b.dataset.edFit);
   else if (b.dataset.edApply) applyPick();
   else if (b.dataset.edSave) saveEditor();
   else if (b.dataset.edReset) resetDish();
@@ -1377,7 +1453,7 @@ $("#healthWeek").addEventListener("click", () => {
   runHealthSync(weekStart, to, () => renderSemana());
 });
 
-const APP_VERSION = "v14"; // igual que CACHE en sw.js
+const APP_VERSION = "v16"; // igual que CACHE en sw.js
 $("#appVersion").textContent = "Versión de la app: " + APP_VERSION;
 
 /* arranque */
