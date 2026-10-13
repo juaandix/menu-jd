@@ -25,15 +25,15 @@
     <!-- HOY -->
     <section id="view-hoy" class="view" aria-label="Hoy">
       <header class="top">
-        <button class="icon-btn" id="prevDay" aria-label="Día anterior">‹</button>
+        <button class="icon-btn" id="prevDay" aria-label="Día anterior"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="m15 5-7 7 7 7"/></svg></button>
         <div class="date-wrap">
           <h1 id="dateTitle">Hoy</h1>
           <div class="type-row">
             <select id="dayType" aria-label="Tipo de día"></select>
-            <button class="icon-btn small" id="gcalDetect" aria-label="Detectar tipo de día desde Google Calendar" title="Detectar desde calendario">📅</button>
+            <button class="icon-btn small" id="gcalDetect" aria-label="Detectar tipo de día desde Google Calendar" title="Detectar desde calendario"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15.5" rx="3"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg></button>
           </div>
         </div>
-        <button class="icon-btn" id="nextDay" aria-label="Día siguiente">›</button>
+        <button class="icon-btn" id="nextDay" aria-label="Día siguiente"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg></button>
       </header>
 
       <div class="summary" id="summary"></div>
@@ -41,12 +41,13 @@
         <div class="steps-line">
           <label for="stepsIn" class="steps-label">Pasos</label>
           <input type="text" id="stepsIn" inputmode="numeric" pattern="[0-9.]*" placeholder="p. ej. 12000" autocomplete="off">
-          <button class="btn ghost" id="healthDay" type="button" hidden>⟳ Fitbit</button>
+          <button class="btn ghost" id="healthDay" type="button" hidden><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 0 0-14.3-4.3L4 9"/><path d="M4 4v5h5"/><path d="M4 13a8 8 0 0 0 14.3 4.3L20 15"/><path d="M20 20v-5h-5"/></svg> Fitbit</button>
         </div>
         <p class="muted small" id="stepsInfo"></p>
         <p class="muted small" id="healthStatus" hidden></p>
       </div>
       <div id="slots" class="slots"></div>
+      <button class="btn ghost" id="copyDay" type="button"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2.5"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg> Copiar comidas de otro día</button>
     </section>
 
     <!-- MENÚ -->
@@ -56,6 +57,7 @@
         <h1>Menú</h1>
         <p class="lead" id="menuLead"></p>
       </header>
+      <div class="pantry" id="pantry"></div>
       <div class="builder" id="builderSection">
         <h2>Monta tu día</h2>
         <div class="sel">
@@ -74,16 +76,17 @@
     <!-- SEMANA -->
     <section id="view-semana" class="view" hidden aria-label="Semana">
       <header class="top">
-        <button class="icon-btn" id="prevWeek" aria-label="Semana anterior">‹</button>
+        <button class="icon-btn" id="prevWeek" aria-label="Semana anterior"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="m15 5-7 7 7 7"/></svg></button>
         <div class="date-wrap">
           <h1 id="weekTitle">Semana</h1>
           <p class="muted small" id="weekSub">Domingo a sábado</p>
         </div>
-        <button class="icon-btn" id="nextWeek" aria-label="Semana siguiente">›</button>
+        <button class="icon-btn" id="nextWeek" aria-label="Semana siguiente"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg></button>
       </header>
       <div class="summary" id="weekSummary"></div>
       <div class="week-days" id="weekDays"></div>
-      <button class="btn ghost" id="healthWeek" type="button" hidden>⟳ Traer pasos y peso de Fitbit</button>
+      <button class="btn ghost" id="planWeek" type="button">Planificar días vacíos</button>
+      <button class="btn ghost" id="healthWeek" type="button" hidden><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 0 0-14.3-4.3L4 9"/><path d="M4 4v5h5"/><path d="M4 13a8 8 0 0 0 14.3 4.3L20 15"/><path d="M20 20v-5h-5"/></svg> Traer pasos y peso de Fitbit</button>
 
       <section class="block">
         <h2>Peso</h2>
@@ -98,7 +101,7 @@
 
       <section class="block">
         <h2>Lista de la compra</h2>
-        <p class="muted small">Sale de los platos registrados en esta semana. Pasta, arroz y pollo van en crudo/seco. Para planificar, registra los días que vienen desde Hoy o con "Monta tu día".</p>
+        <p class="muted small">Sale de los platos registrados y planificados en esta semana. Pasta, arroz y pollo van en crudo/seco. Para planificar, usa "Planificar días vacíos", registra los días que vienen desde Hoy o usa "Monta tu día". Lo que marques como comprado deja de salir como que te falta en el Menú.</p>
         <div id="shopList"></div>
         <div class="row">
           <button class="btn ghost" id="shopCopy">Copiar lista</button>
@@ -144,8 +147,8 @@
       </section>
       <section class="block" id="gcalSection">
         <h2>Google: turnos y Fitbit</h2>
-        <p class="muted">Conecta tu Google Calendar para que el botón 📅 de la pantalla Hoy proponga si ese día trabajas, buscando una palabra clave en el título de los eventos de ese día. Necesita conexión a internet; el resto de la app sigue funcionando sin ella.</p>
-        <p class="muted" id="healthHelp">Con el mismo Client ID, los botones "⟳ Fitbit" de Hoy y Semana traen tus pasos (y tu peso, si lo registras en Google Health) desde la API de Google Health. En el proyecto de Google Cloud tienen que estar habilitada la "Google Health API" y los permisos <code>googlehealth.activity_and_fitness.readonly</code> y, para el peso, <code>googlehealth.health_metrics_and_measurements.readonly</code>.</p>
+        <p class="muted">Conecta tu Google Calendar para que el botón de calendario de la pantalla Hoy proponga si ese día trabajas, buscando una palabra clave en el título de los eventos de ese día. Necesita conexión a internet; el resto de la app sigue funcionando sin ella.</p>
+        <p class="muted" id="healthHelp">Con el mismo Client ID, los botones "Fitbit" de Hoy y Semana traen tus pasos (y tu peso, si lo registras en Google Health) desde la API de Google Health. En el proyecto de Google Cloud tienen que estar habilitada la "Google Health API" y los permisos <code>googlehealth.activity_and_fitness.readonly</code> y, para el peso, <code>googlehealth.health_metrics_and_measurements.readonly</code>.</p>
         <div class="sel">
           <label for="gcalClientId">Client ID de Google<input type="text" id="gcalClientId" placeholder="xxxx.apps.googleusercontent.com"></label>
           <label for="gcalKeyword">Palabra clave<input type="text" id="gcalKeyword" placeholder="turno"></label>
@@ -172,7 +175,7 @@
   <div class="sheet" id="sheet" hidden role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
     <div class="sheet-head">
       <h2 id="sheetTitle">Añadir</h2>
-      <button class="icon-btn" id="sheetClose" aria-label="Cerrar">✕</button>
+      <button class="icon-btn" id="sheetClose" aria-label="Cerrar"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
     </div>
     <div id="sheetBody"></div>
   </div>

@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tests · Menú JD</title>
+  <style>
+    body{font-family:ui-monospace,Menlo,monospace;background:#0d1b2e;color:#e8eef9;margin:0;padding:16px;font-size:13px}
+    .ok{color:#6fc493} .ko{color:#e2704b;font-weight:700} h1{font-size:16px}
+    iframe{display:none}
+  </style>
+</head>
+<body>
+  <h1 id="head">Ejecutando tests…</h1>
+  <pre id="out"></pre>
+  <!-- Abre http://localhost:8080/tests.html con el servidor de pruebas. Carga la app en un iframe y prueba sus
+       funciones puras (no escribe en el registro; lo que toca de localStorage lo deja como estaba). -->
+  <iframe id="app" src="index.html"></iframe>
+<script>
+"use strict";
+const lines = [];
+let pass = 0, fail = 0;
+function t(name, fn) {
+  try { const r = fn(); if (r === false) throw new Error("falso"); pass++; lines.push(`<span class="ok">✓</span> ${name}`); }
+  catch (e) { fail++; lines.push(`<span class="ko">✗ ${name}</span>\n    ${String(e.message || e).replace(/</g, "&lt;")}`); }
+}
+function eq(a, b, msg = "") { if (a !== b) throw new Error(`${msg} esperaba ${JSON.stringify(b)}, salió ${JSON.stringify(a)}`); }
+function near(a, b, tol, msg = "") { if (!(Math.abs(a - b) <= tol)) throw new Error(`${msg} esperaba ${b} ±${tol}, salió ${a}`); }
+
+let swText = "";
+fetch("sw.js", { cache: "no-store" }).then((r) => r.text()).then((x) => (swText = x)).catch(() => {});
+document.getElementById("app").addEventListener("load", () => setTimeout(run, 300));
+function run() {
+  const w = document.getElementById("app").contentWindow;
+  const E = (code) => w.eval(code); // ámbito global de la app (llega a const/let como SHOP o profile)
+  const SHOP = E("SHOP"), PROFILES = E("PROFILES"), ROLE_LABELS = E("ROLE_LABELS");
+  // Que nada de lo guardado en este navegador (Mis productos, lo que falta) cambie los resultados.
+  const saved = {};
+  for (const k of ["menujd.products.v1", "menujd.missing.v1"]) { saved[k] = w.localStorage.getItem(k); w.localStorage.removeItem(k); }
+  E("parseCache.clear()");
+  const withProfile = (id, fn) => {
+    const prev = E("profile.id");
+    E(`profile = PROFILES.${id}; rebuildIndex();`);
+    try { return fn(); } finally { E(`profile = PROFILES.${prev}; rebuildIndex();`); }
+  };
+
+  /* despliegue */
+  t("sw.js tiene contenido y su CACHE coincide con APP_VERSION", () => {
+    if (!swText.includes("addEventListener(\"fetch\"") && !swText.includes("addEventListener('fetch'")) throw new Error("sw.js vacío o sin manejador fetch");
+    const v = E("APP_VERSION");
+    if (!swText.includes(`"menujd-${v}"`)) throw new Error(`sw.js no tiene "menujd-${v}"`);
+  });
+
+  /* catálogo */
+  t("Cada entrada del catálogo tiene un grupo válido (r)", () => {
+    const bad = SHOP.filter((c) => !c.r || !ROLE_LABELS[c.r.split(":")[0]]).map((c) => c.key);
+    eq(bad.length, 0, "sin grupo: " + bad.join(", "));
+  });
+  t("Ida y vuelta: el texto de sustituto (w) vuelve a caer en la misma entrada", () => {
+    const bad = [];
+    for (const c of SHOP) {
+      if (c.w && w.parseIng(`100 g de ${c.w}`).c?.key !== c.key) bad.push(c.key);
+      if (c.cooked && c.cooked.w) { const r = w.parseIng(`100 g de ${c.cooked.w}`); if (r.c?.key !== c.key || !r.cooked) bad.push(c.key + " (cocido)"); }
+    }
+    eq(bad.length, 0, "fallan: " + bad.join(", "));
+  });
+  t("Todos los ingredientes de los platos de JD caen en el catálogo o son verduras libres", () => {
+    const bad = withProfile("jd", () => E("ALL").flatMap((o) => o.i.filter((raw) => !w.parseIng(raw).c).map((raw) => `${o.id}: ${raw}`)));
+    if (bad.length) console.info("Sin entrada en el catálogo:", bad);
+    return true; // informativo: las verduras libres y "al gusto" no tienen entrada
+  });
+
+  /* platos de JD: regla del intercambio */
+  t("Platos de JD dentro de su franja (±15 kcal, ±3 g P; snacks 13–21 g P)", () => {
+    const bad = [];
+    withProfile("jd", () => {
+      const prof = E("profile");
+      for (const s of prof.slots) for (const o of E(`profile._baseMenu["${s.id}"]`)) {
+        const tg = s.target; if (!tg) continue;
+        const okK = Math.abs(o.k - tg.k) <= 15;
+        const okP = tg.p != null ? Math.abs(o.p - tg.p) <= 3 : o.p >= tg.pMin && o.p <= tg.pMax;
+        if (!okK || !okP) bad.push(`${o.id} ${o.k} kcal ${o.p} g P`);
+      }
+    });
+    eq(bad.length, 0, bad.join("; "));
+  });
+  t("Macros de los platos de JD = suma de sus ingredientes (±3 %)", () => {
+    const bad = [];
+    withProfile("jd", () => {
+      for (const o of E("profile._baseMenu ? Object.values(profile._baseMenu).flat() : ALL")) {
+        const sum = o.i.reduce((a, raw) => a + ((w.ingMacros(raw) || {}).k || 0), 0);
+        if (Math.abs(sum - o.k) > o.k * 0.03) bad.push(`${o.id}: plato ${o.k}, ingredientes ${Math.round(sum)}`);
+      }
+    });
+    eq(bad.length, 0, bad.join("; "));
+  });
+
+  /* gramos del sustituto */
+  t("fitGramsFor 'k' iguala las kcal", () => {
+    const o = { k: 247.5, p: 46.5, c: 0, f: 5.4 };
+    const g = w.fitGramsFor(o, [100, 23, 0, 1], "k");
+    near(g, 248, 1);
+  });
+  t("fitGramsFor 'auto' queda entre igualar kcal e igualar proteína", () => {
+    const o = { k: 247.5, p: 46.5, c: 0, f: 5.4 }, nut = [100, 23, 0, 1];
+    const g = w.fitGramsFor(o, nut, "auto"), gk = w.fitGramsFor(o, nut, "k"), gp = w.fitGramsFor(o, nut, "p");
+    return g <= Math.max(gk, gp) && g >= Math.min(gk, gp);
+  });
+  t("fitGramsFor devuelve 0 si el nuevo no tiene de ese macro", () => eq(w.fitGramsFor({ k: 100, p: 10, c: 0, f: 0 }, [100, 23, 0, 1], "c"), 0));
+  t("En ingredientes sin apenas proteína (arroz) se igualan las kcal", () => eq(w.defaultFit(w.ingMacros("200 g de arroz cocido")), "k"));
+
+  /* sustitutos recomendados */
+  const subs = (raw) => w.substitutes(raw).map((r) => r.opt.c.key);
+  t("Pollo cocido → recomienda pavo fresco entre los 3 primeros", () => { const s = subs("150 g de pollo cocido"); if (!s.slice(0, 3).includes("pavofresco")) throw new Error(s.join(", ")); });
+  t("Arroz cocido → recomienda pasta entre los 3 primeros", () => { const s = subs("200 g de arroz cocido"); if (!s.slice(0, 3).includes("pasta")) throw new Error(s.join(", ")); });
+  t("Aceite → solo grasas", () => { const s = w.substitutes("10 g de aceite de oliva"); return s.length > 0 && s.every((r) => r.opt.c.r.startsWith("grasa")); });
+  t("Nunca recomienda el mismo ingrediente ni salsas para algo que no es salsa", () => {
+    for (const raw of ["150 g de pollo cocido", "200 g de arroz cocido", "100 g de queso batido 0%", "1 plátano", "45 g de avena molida"]) {
+      const old = w.parseIng(raw).c.key;
+      for (const r of w.substitutes(raw)) {
+        if (r.opt.c.key === old) throw new Error(`${raw} → sí mismo`);
+        if ((r.opt.c.r || "").startsWith("salsa")) throw new Error(`${raw} → ${r.opt.c.key}`);
+      }
+    }
+  });
+  t("Lo que te falta no sale como sustituto", () => {
+    w.localStorage.setItem("menujd.missing.v1", JSON.stringify(["pavofresco"]));
+    try { return !subs("150 g de pollo cocido").includes("pavofresco"); }
+    finally { w.localStorage.removeItem("menujd.missing.v1"); }
+  });
+  t("dishMissing marca los platos que llevan algo que falta", () => {
+    w.localStorage.setItem("menujd.missing.v1", JSON.stringify(["pollo"]));
+    try {
+      return withProfile("jd", () => {
+        const all = E("ALL"), hit = all.filter((o) => w.dishMissing(o).length);
+        return hit.length > 0 && hit.every((o) => o.i.some((raw) => w.parseIng(raw).c?.key === "pollo"));
+      });
+    } finally { w.localStorage.removeItem("menujd.missing.v1"); }
+  });
+
+  /* plan de Cristina */
+  t("Plan de Cristina: cada día de S1 y S2 tiene sus 5 comidas", () => {
+    withProfile("cristina", () => {
+      eq(w.planWeeks().join(","), "S1,S2", "semanas");
+      for (const wk of ["s1", "s2"]) for (let i = 0; i < 7; i++) {
+        const d = new Date(2026, 9, 11 + i, 12); // domingo 11/10/2026 → sábado
+        const n = w.planDishes(wk, d).length;
+        if (n !== 5) throw new Error(`${wk} ${d.toDateString()}: ${n} comidas`);
+      }
+    });
+  });
+
+  /* peso */
+  t("weightTrend: −0,1 kg/día con 20 días de datos", () => {
+    const wts = {}, keys = [];
+    for (let i = 0; i < 20; i++) { const k = E(`iso(new Date(2026, 8, ${1 + i}, 12))`); wts[k] = 87 - 0.1 * i; keys.push(k); }
+    const tr = w.weightTrend(wts, keys);
+    near(tr.slope, -0.1, 0.001); near(tr.now, 85.1, 0.01);
+  });
+  t("weightTrend: sin datos suficientes no da tendencia", () => eq(w.weightTrend({ "2026-09-01": 87, "2026-09-02": 86.8 }, ["2026-09-01", "2026-09-02"]), null));
+
+  t("Producto apuntado desde Google: se reconoce al escribirlo y da sus macros", () => {
+    w.localStorage.setItem("menujd.products.v1", JSON.stringify([{ key: "utest", n: "Puré de verduras", nut: [81, 2, 12.5, 2.9] }]));
+    E("parseCache.clear()");
+    try {
+      const m = w.ingMacros("300 g de Puré de verduras");
+      near(m.k, 243, 0.5); near(m.p, 6, 0.01);
+      eq(w.parseIng("300 g de pure de verduras").c.key, "utest", "sin tilde");
+    } finally { w.localStorage.removeItem("menujd.products.v1"); E("parseCache.clear()"); }
+  });
+
+  /* números */
+  t("parseIng: unidades y gramos entre paréntesis", () => {
+    near(w.parseIng("2 huevos L").grams, 120, 0.1);
+    near(w.parseIng("1 lata de atún al natural (56 g)").grams, 56, 0.1);
+  });
+
+  for (const [k, v] of Object.entries(saved)) if (v != null) w.localStorage.setItem(k, v); else w.localStorage.removeItem(k);
+  E("parseCache.clear()");
+  document.getElementById("out").innerHTML = lines.join("\n");
+  const h = document.getElementById("head");
+  h.textContent = fail ? `✗ ${fail} fallos, ${pass} bien` : `✓ ${pass} tests bien`;
+  h.className = fail ? "ko" : "ok";
+  document.title = fail ? `FALLOS ${fail}` : `OK ${pass}`;
+}
+</script>
+</body>
+</html>

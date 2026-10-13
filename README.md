@@ -17,6 +17,7 @@ icons/                192, 512, maskable y apple-touch-icon
 ```bash
 python3 -m http.server 8080
 # abre http://localhost:8080
+# tests: http://localhost:8080/tests.html
 ```
 
 ## Publicar gratis en GitHub Pages (HTTPS obligatorio para PWA)
