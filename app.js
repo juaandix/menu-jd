@@ -275,6 +275,7 @@ function openEntry(idx) {
     <div class="portion-card">
       <p class="muted small">Ración</p>
       <div class="portion-row">${PORTIONS.map((pt) => `<button class="portion-btn${Math.abs(pt.mult - mult) < 0.01 ? " is-default" : ""}" data-ent-portion="${pt.mult}"><b>${pt.label}×</b><span>${r0((x.k / mult) * pt.mult)} kcal · ${f1((x.p / mult) * pt.mult)} g P</span></button>`).join("")}</div>
+      ${multHTML("ent", { k: x.k / mult, p: x.p / mult })}
       <p class="muted small">Mover a</p>
       <div class="recent-row">${profile.slots.filter((s) => s.id !== x.slot).map((s) => `<button class="chip-opt" data-ent-move="${s.id}">${s.label}</button>`).join("")}</div>
     </div>
@@ -387,7 +388,8 @@ function renderFoodRow(q) {
   if (nq.length < 2) { box.innerHTML = ""; return; }
   const words = nq.split(/\s+/).filter((w) => w.length > 2 && !["con", "de", "del", "los", "las"].includes(w));
   const opts = foodOptions().filter((o) => { const t = norm(o.label); return t.includes(nq) || (words.length && words.every((w) => t.includes(w))); })
-    .sort((a, b) => (b.c.user ? 1 : 0) - (a.c.user ? 1 : 0)).slice(0, 6);
+    .map((o) => { const t = norm(o.label); return { o, s: (o.c.user ? 0 : 4) + (t === nq ? 0 : t.startsWith(nq) ? 1 : 2) + t.length / 100 }; })
+    .sort((a, b) => a.s - b.s).map((x) => x.o).slice(0, 6);
   box.innerHTML = (opts.length ? `<div class="recent-label">Ingredientes y tus productos</div><div class="ed-options">${opts.map((o) => `<button class="opt rec" data-food-log="${o.id}"><span>${esc(o.label)}${o.c.user ? `<small>tu producto</small>` : ""}</span><span class="kc">${r0(o.nut[0])} kcal<br>${f1(o.nut[1])} g P /100 g</span></button>`).join("")}</div>` : "")
     + `<button class="btn ghost web-btn" type="button" data-web-search="1">${ico("search")} Buscar «${esc(q.trim())}» en Google</button>
     <p class="muted small">Abre Google con sus macros por 100 g; al volver tendrás el formulario preparado para apuntarlos.</p>`;
@@ -437,11 +439,52 @@ function logFood(optId, g) {
   const o = foodOptions().find((x) => x.id === optId);
   if (!o || !(g > 0)) return;
   const w = o.cooked ? o.c.cooked.w : o.c.w;
-  const txt = `${fmtG(g)} g de ${w}`;
-  const m = ingMacros(txt) || { k: (o.nut[0] * g) / 100, p: (o.nut[1] * g) / 100, c: (o.nut[2] * g) / 100, f: (o.nut[3] * g) / 100 };
-  const n = `${o.label} (${fmtG(g)} g)`;
+  // En las de la compra por litros (bebidas, aceite) la cantidad va en ml; en el resto, en gramos.
+  const u = o.c.u === "ml" ? "ml" : "g", gr = g * (u === "ml" ? o.c.dens || 1 : 1);
+  const txt = `${fmtG(g)} ${u} de ${w}${unitsText(o, g)}`;
+  const m = ingMacros(txt) || { k: (o.nut[0] * gr) / 100, p: (o.nut[1] * gr) / 100, c: (o.nut[2] * gr) / 100, f: (o.nut[3] * gr) / 100 };
+  const n = o.c.g && o.c.u === "ud" ? `${o.label} · ${f1(g / o.c.g)} ud` : `${o.label} (${fmtG(g)} ${u})`;
   addItem(sheetState.slot, { n, i: [txt], m: 1, ...scaled(m, 1) });
   afterDishChange(); closeSheet(); toast("Añadido: " + n);
+}
+// Contador de unidades para ingredientes que se cuentan por piezas (muffins, huevos, yogures…): rellena los gramos.
+function unitsHTML(o, target) {
+  if (!o.c.g) return "";
+  return `<div class="units" data-ug="${o.c.g}" data-target="${target}">
+    <div class="units-top"><span>Unidades <small>1 ≈ ${o.c.g} g</small></span>
+      <div class="stepper"><button type="button" class="st-btn" data-u-step="-1" aria-label="Una menos">−</button><b class="units-v"></b><button type="button" class="st-btn" data-u-step="1" aria-label="Una más">+</button></div></div>
+    <div class="recent-row">${[1, 2, 3, 4, 6].map((n) => `<button type="button" class="chip-opt" data-u-set="${n}">${n}</button>`).join("")}</div></div>`;
+}
+const gramsLabel = (o) => (o.c.u === "ml" ? "Gramos (o ml)" : "Gramos");
+function syncUnits() {
+  document.querySelectorAll(".units").forEach((box) => {
+    const n = (parseFloat($("#" + box.dataset.target).value.replace(",", ".")) || 0) / +box.dataset.ug;
+    box.querySelector(".units-v").textContent = f1(n);
+    box.querySelectorAll("[data-u-set]").forEach((c) => c.classList.toggle("on", Math.abs(+c.dataset.uSet - n) < 0.01));
+  });
+}
+function stepUnits(b) {
+  const box = b.closest(".units"), inp = $("#" + box.dataset.target), g = +box.dataset.ug;
+  const cur = (parseFloat(inp.value.replace(",", ".")) || 0) / g;
+  const n = b.dataset.uSet ? +b.dataset.uSet : Math.max(0.5, Math.round(cur * 2) / 2 + +b.dataset.uStep);
+  inp.value = fmtG(n * g);
+  inp.dispatchEvent(new Event("input"));
+}
+const unitsText = (o, g) => (o.c.g && o.c.u === "ud" ? ` (${f1(g / o.c.g)} ud)` : "");
+// "Otra cantidad": raciones de un plato fuera de ½/1/1½/2 (p. ej. 3×), de 0,5 en 0,5.
+function multHTML(kind, per, dishId = "") {
+  return `<div class="mult" data-kind="${kind}" data-dish="${dishId}" data-k="${per.k}" data-p="${per.p}" data-m="3">
+    <div class="units-top"><span>Otra cantidad</span>
+      <div class="stepper"><button type="button" class="st-btn" data-m-step="-0.5" aria-label="Menos">−</button><b class="units-v">3×</b><button type="button" class="st-btn" data-m-step="0.5" aria-label="Más">+</button></div></div>
+    <button type="button" class="btn ghost mult-go" ${kind === "ent" ? `data-ent-portion="3"` : `data-portion="3" data-dish="${dishId}"`}>${kind === "ent" ? "Cambiar a" : "Añadir"} 3× · ${r0(per.k * 3)} kcal · ${f1(per.p * 3)} g P</button></div>`;
+}
+function stepMult(b) {
+  const box = b.closest(".mult"), m = Math.min(10, Math.max(0.5, +box.dataset.m + +b.dataset.mStep));
+  box.dataset.m = m;
+  const lab = portionLabel(m), go = box.querySelector(".mult-go");
+  box.querySelector(".units-v").textContent = lab + "×";
+  if (box.dataset.kind === "ent") go.dataset.entPortion = m; else go.dataset.portion = m;
+  go.textContent = `${box.dataset.kind === "ent" ? "Cambiar a" : "Añadir"} ${lab}× · ${r0(box.dataset.k * m)} kcal · ${f1(box.dataset.p * m)} g P`;
 }
 function openFoodGrams(optId) {
   const o = foodOptions().find((x) => x.id === optId);
@@ -450,12 +493,13 @@ function openFoodGrams(optId) {
     <button class="back-link" type="button" data-web-back="1">${ico("back")} Volver a la búsqueda</button>
     <form id="foodForm" class="portion-card" data-opt="${o.id}">
       <p><b>${esc(o.label)}</b> <span class="muted small">(${r0(o.nut[0])} kcal · ${f1(o.nut[1])} g P por 100 g)</span></p>
-      <label for="ffG">Gramos${o.c.g ? ` (1 unidad ≈ ${o.c.g} g)` : ""}<input type="text" inputmode="decimal" id="ffG" value="${o.c.g || 100}"></label>
+      ${unitsHTML(o, "ffG")}
+      <label for="ffG">${o.c.u === "ml" ? "Mililitros" : "Gramos"}<input type="text" inputmode="decimal" id="ffG" value="${o.c.g || (o.c.u === "ml" ? 200 : 100)}"></label>
       <p class="ed-sum" id="ffPrev"></p>
       <button class="btn" type="submit">Registrar</button>
     </form>`;
-  const prev = () => { const g = parseFloat($("#ffG").value.replace(",", ".")) || 0; $("#ffPrev").innerHTML = g ? `<b>${macrosTxt({ k: o.nut[0] * g / 100, p: o.nut[1] * g / 100, c: o.nut[2] * g / 100, f: o.nut[3] * g / 100 })}</b>` : ""; };
-  $("#ffG").addEventListener("input", prev); prev();
+  const prev = () => { const g = (parseFloat($("#ffG").value.replace(",", ".")) || 0) * (o.c.u === "ml" ? o.c.dens || 1 : 1); $("#ffPrev").innerHTML = g ? `<b>${macrosTxt({ k: o.nut[0] * g / 100, p: o.nut[1] * g / 100, c: o.nut[2] * g / 100, f: o.nut[3] * g / 100 })}</b>` : ""; };
+  $("#ffG").addEventListener("input", () => { prev(); syncUnits(); }); prev(); syncUnits();
 }
 function openPortionStep(dishId) {
   const o = byId(dishId);
@@ -468,6 +512,7 @@ function openPortionStep(dishId) {
         ${PORTIONS.map((pt) => `<button class="portion-btn${pt.mult === 1 ? " is-default" : ""}" data-portion="${pt.mult}" data-dish="${o.id}">
           <b>${pt.label}×</b><span>${r0(o.k * pt.mult)} kcal · ${f1(o.p * pt.mult)} g P</span></button>`).join("")}
       </div>
+      ${multHTML("portion", o, o.id)}
       ${dishMissing(o).length ? `<p class="miss-note"><span>${ico("alert")} No tienes ${esc(missNames(dishMissing(o)))}.</span></p><button class="btn" type="button" data-ed-fixlog="${o.id}">Sustituir solo para hoy</button>` : ""}
       <button class="btn ghost" type="button" data-ed-logdish="${o.id}">${ico("edit")} Cambiar ingredientes solo para hoy</button>
     </div>`;
@@ -494,7 +539,7 @@ function productEntry(p) { return { key: p.key, n: p.n, u: "g", g: p.g || null, 
 function catalog() { return [...userProducts().map(productEntry), ...SHOP]; }
 // Grupos de alimento (campo r de SHOP) que se pueden elegir para Mis productos.
 const ROLE_LABELS = { prot: "Carne, pescado o huevo", lacteo: "Lácteo", queso: "Queso", polvo: "Proteína en polvo", hc: "Pan, cereal, pasta, arroz o patata",
-  fruta: "Fruta", verdura: "Verdura", grasa: "Grasa o frutos secos", dulce: "Dulce", salsa: "Salsa", casero: "Casero" };
+  fruta: "Fruta", verdura: "Verdura", grasa: "Grasa o frutos secos", dulce: "Dulce", salsa: "Salsa", casero: "Casero", bebida: "Bebida" };
 
 /* ---------- "No tengo": ingredientes que faltan en casa ---------- */
 // Claves del catálogo; comunes a todos los perfiles (la despensa es la misma). Los platos que los llevan
@@ -864,14 +909,15 @@ function openGrams(optId) {
     <div class="portion-card">
       <p><b>${esc(o.label)}</b> <span class="muted small">(${r0(o.nut[0])} kcal · ${f1(o.nut[1])} g P por 100 g)</span></p>
       ${ed.fit ? `<div class="fit-row" role="group" aria-label="Calcular gramos para igualar">${FIT_MODES.map((f) => `<button class="chip-opt fit-btn" data-ed-fit="${f.id}">${f.label}</button>`).join("")}</div>` : ""}
-      <label for="edGrams">Gramos${o.c.g ? ` (1 unidad ≈ ${o.c.g} g)` : ""}<input type="text" inputmode="decimal" id="edGrams" value="${fmtG(ed.grams)}"></label>
+      ${unitsHTML(o, "edGrams")}
+      <label for="edGrams">${gramsLabel(o)}<input type="text" inputmode="decimal" id="edGrams" value="${fmtG(ed.grams)}"></label>
       <div id="edPreview"></div>
       <div class="row">
         <button class="btn" data-ed-apply="1">${ed.idx != null ? "Cambiar" : "Añadir"}</button>
       </div>
     </div>`;
-  $("#edGrams").addEventListener("input", (e) => { ed.grams = parseFloat(e.target.value.replace(",", ".")) || 0; ed.fit = ed.fit && "manual"; renderGramsPreview(); });
-  renderGramsPreview();
+  $("#edGrams").addEventListener("input", (e) => { ed.grams = parseFloat(e.target.value.replace(",", ".")) || 0; ed.fit = ed.fit && "manual"; renderGramsPreview(); syncUnits(); });
+  renderGramsPreview(); syncUnits();
 }
 // Cómo se calculan los gramos del sustituto. "auto" busca el mejor equilibrio entre kcal y proteína
 // pesando cada una por la tolerancia de las franjas (±15 kcal, ±3 g P): un solo ingrediente no puede
@@ -900,12 +946,11 @@ function setFit(mode) {
   const g = fitGrams(mode);
   if (!g) { toast("El ingrediente nuevo no tiene de eso"); return; }
   ed.fit = mode; ed.grams = g;
-  $("#edGrams").value = fmtG(g); renderGramsPreview();
+  $("#edGrams").value = fmtG(g); renderGramsPreview(); syncUnits();
 }
 function pickText() {
   const o = ed.pick, w = o.cooked ? o.c.cooked.w : o.c.w;
-  const units = o.c.g && o.c.u === "ud" ? ` (≈${f1(ed.grams / o.c.g).toString().replace(".", ",")} ud)` : "";
-  return `${fmtG(ed.grams)} g de ${w}${units}`;
+  return `${fmtG(ed.grams)} g de ${w}${unitsText(o, ed.grams)}`;
 }
 function pickDelta() {
   const newM = ingMacros(pickText());
@@ -1193,7 +1238,7 @@ function renderWeight() {
 }
 
 /* lista de la compra */
-const SHOP_CATS = ["Fruta y verdura", "Carne y pescado", "Charcutería", "Huevos", "Lácteos", "Panadería", "Despensa", "Caseros", "Mis productos"];
+const SHOP_CATS = ["Fruta y verdura", "Carne y pescado", "Charcutería", "Huevos", "Lácteos", "Panadería", "Despensa", "Bebidas", "Caseros", "Mis productos"];
 function shopCheckKey() { return `menujd.shopcheck.${profile.id}.v1`; }
 function loadChecks() { try { return JSON.parse(localStorage.getItem(shopCheckKey())) || {}; } catch { return {}; } }
 function saveChecks(all) {
@@ -1369,11 +1414,9 @@ document.addEventListener("click", (e) => {
   else if (b.dataset.portion) {
     const o = byId(b.dataset.dish);
     const mult = parseFloat(b.dataset.portion);
-    const pt = PORTIONS.find((p) => p.mult === mult);
-    const suffix = mult === 1 ? "" : ` · ración ${pt.label}`;
     pushRecent(sheetState.slot, o.id);
-    addItem(sheetState.slot, { ref: o.id, m: mult, n: o.n + suffix, k: r0(o.k * mult), p: r1(o.p * mult), c: r1(o.c * mult), f: r1(o.f * mult) });
-    closeSheet(); toast("Añadido: " + o.n + suffix);
+    addItem(sheetState.slot, { ref: o.id, m: mult, n: withPortion(o.n, mult), ...scaled(o, mult) });
+    closeSheet(); toast("Añadido: " + withPortion(o.n, mult));
   }
   else if (b.dataset.pick) { openPortionStep(b.dataset.pick); }
   else if (b.dataset.edit) openEditor(b.dataset.edit);
@@ -1395,6 +1438,8 @@ document.addEventListener("click", (e) => {
     saveProducts(userProducts().filter((p) => p.key !== b.dataset.prodDel));
     afterDishChange(); renderProducts(); toast("Producto borrado");
   }
+  else if (b.dataset.uStep || b.dataset.uSet) stepUnits(b);
+  else if (b.dataset.mStep) stepMult(b);
   else if (b.dataset.webSearch) {
     // Se abre Google en otra pestaña y la hoja se queda con el formulario listo para cuando vuelvas.
     const q = sheetState.query.trim();
@@ -1805,7 +1850,7 @@ $("#healthWeek").addEventListener("click", () => {
   runHealthSync(weekStart, to, () => renderSemana());
 });
 
-const APP_VERSION = "v19"; // igual que CACHE en sw.js
+const APP_VERSION = "v20"; // igual que CACHE en sw.js
 $("#appVersion").textContent = "Versión de la app: " + APP_VERSION;
 
 /* arranque */

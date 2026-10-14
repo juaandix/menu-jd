@@ -169,6 +169,23 @@ function run() {
     } finally { w.localStorage.removeItem("menujd.products.v1"); E("parseCache.clear()"); }
   });
 
+  /* bebidas y unidades */
+  t("Bebidas: cada texto cae en su entrada (y el zumo de limón no es zumo)", () => {
+    const cases = { "1 café con leche": "cafeleche", "1 cortado": "cafeleche", "1 café americano": "cafe", "330 ml de cerveza": "cerveza",
+      "1 caña": "cerveza", "330 ml de cerveza sin alcohol": "cervezasin", "330 ml de coca-cola zero": "refresco", "150 ml de vino tinto": "vino",
+      "200 ml de zumo de naranja": "zumo", "250 ml leche semi": "leche" };
+    for (const [raw, key] of Object.entries(cases)) eq(w.parseIng(raw).c?.key, key, raw);
+    if (w.parseIng("perejil fresco, zumo de limón y sal").c?.key === "zumo") throw new Error("zumo de limón cae en zumo");
+  });
+  t("330 ml de cerveza ≈ 142 kcal; 1 café con leche ≈ 48 kcal", () => {
+    near(w.ingMacros("330 ml de cerveza").k, 141.9, 0.5);
+    near(w.ingMacros("1 café con leche").k, 48, 0.5);
+  });
+  t("Unidades: 228 g de muffins caseros (3 ud) = 3 muffins de 111 kcal", () => {
+    const r = w.parseIng("228 g de muffins caseros (3 ud)");
+    eq(r.c.key, "muffin"); near(r.qty, 3, 0.01); near(w.ingMacros(r.raw).k, 333, 1);
+  });
+
   /* números */
   t("parseIng: unidades y gramos entre paréntesis", () => {
     near(w.parseIng("2 huevos L").grams, 120, 0.1);

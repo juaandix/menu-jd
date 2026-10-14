@@ -419,3 +419,16 @@ input[type=search]{-webkit-appearance:none;appearance:none;padding-left:38px;
   .ring-c strong{font-size:1.5rem}
 }
 @media (prefers-reduced-motion: reduce){*{transition:none!important;animation:none!important}}
+
+/* contador de unidades y "otra cantidad" */
+.units,.mult{display:grid;gap:10px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r-md);padding:12px 14px}
+.units-top{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.units-top > span{font-weight:600;font-size:.92rem}
+.units-top small{display:block;color:var(--muted);font-weight:450;font-size:.74rem}
+.stepper{display:flex;align-items:center;gap:4px;background:var(--field);border:1px solid var(--line-2);border-radius:99px;padding:3px}
+.st-btn{width:40px;height:40px;border:0;border-radius:99px;background:var(--surface-2);color:var(--fg);font-size:1.3rem;line-height:1;cursor:pointer}
+.st-btn:active{background:var(--surface-3)}
+.stepper .units-v{min-width:46px;text-align:center;font-family:var(--display);font-size:1.15rem;font-weight:700}
+.units .chip-opt{min-width:46px;justify-content:center}
+.chip-opt.on{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}
+.mult .btn{width:100%}

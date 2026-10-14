@@ -217,13 +217,21 @@ const PROFILES = {
 // dens: g por ml (para pasar gramos a ml). cooked: factor cocinado → crudo/seco cuando el texto dice cocido.
 // nut: [kcal, P, C, G] por 100 g de lo que se escribe (cooked.nut si el texto dice cocido). Valores de etiqueta Mercadona
 // para lo que usa JD (ver CLAUDE.md); para fruta, verdura y genéricos, valores típicos de tablas de composición.
-// r: grupo de alimento (prot, lacteo, queso, polvo, hc, fruta, verdura, grasa, dulce, salsa, casero), con subgrupo opcional
+// r: grupo de alimento (prot, lacteo, queso, polvo, hc, fruta, verdura, grasa, dulce, salsa, casero, bebida), con subgrupo opcional
 // tras ":" (prot:carne, hc:guarnicion…). El editor solo recomienda sustitutos del mismo grupo y prefiere el mismo subgrupo.
 // w: cómo se escribe el ingrediente al usarlo como sustituto en el editor (tiene que volver a caer en esta misma entrada).
 const SHOP = [
   { key: "aceite", r: "grasa", n: "Aceite de oliva", u: "ml", dens: 0.92, re: /aceite|aove/, cat: "Despensa", nut: [900, 0, 0, 100], w: "aceite de oliva" },
   { key: "clear", r: "polvo", n: "Clear Whey", u: "g", re: /clear whey/, cat: "Despensa", nut: [352, 80, 6, 0], w: "Clear Whey" },
   { key: "whey", r: "polvo", n: "Proteína en polvo (whey)", u: "g", g: 30, re: /scoop|whey|de proteina$/, cat: "Despensa", nut: [377, 72, 9.1, 5.8], w: "proteína whey" },
+  // Bebidas (valores típicos de tablas, por 100 ml). Van antes que "leche" para que "café con leche" no caiga en la leche.
+  { key: "cafeleche", r: "bebida", n: "Café con leche (taza)", u: "ud", g: 200, re: /cafe con leche|cortado|capuchino|cappuccino|latte/, cat: "Bebidas", nut: [24, 1.7, 2.4, 0.8], w: "café con leche" },
+  { key: "cafe", r: "bebida", n: "Café solo / americano (taza)", u: "ud", g: 200, re: /\bcafe\b|americano|expreso|espresso/, cat: "Bebidas", nut: [1, 0.1, 0, 0], w: "café americano" },
+  { key: "refresco", r: "bebida", n: "Refresco zero", u: "ml", re: /refresco|coca.?cola|cola zero/, cat: "Bebidas", nut: [1, 0, 0.1, 0], w: "refresco zero" },
+  { key: "cervezasin", r: "bebida", n: "Cerveza sin alcohol", u: "ml", re: /(cerveza|cana)s? (sin alcohol|0[,.]0)|sin alcohol/, cat: "Bebidas", nut: [20, 0.3, 4.5, 0], w: "cerveza sin alcohol" },
+  { key: "cerveza", r: "bebida", n: "Cerveza", u: "ml", re: /cerveza|\bcanas?\b/, cat: "Bebidas", nut: [43, 0.5, 3.6, 0], w: "cerveza" },
+  { key: "vino", r: "bebida", n: "Vino", u: "ml", re: /\bvino\b/, cat: "Bebidas", nut: [85, 0.1, 2.6, 0], w: "vino tinto" },
+  { key: "zumo", r: "bebida", n: "Zumo de naranja", u: "ml", re: /zumo(?! de limon)/, cat: "Bebidas", nut: [45, 0.7, 10.4, 0.2], w: "zumo de naranja" },
   { key: "postre", r: "lacteo", n: "Postre +Proteínas", u: "ud", g: 120, re: /postre/, cat: "Lácteos", nut: [54, 8.3, 5.4, 0.2], w: "postre +Proteínas" },
   { key: "tarta", r: "casero", n: "Tarta de queso casera (porción)", u: "ud", g: 145, re: /tarta|porcion/, cat: "Caseros", nut: [114.5, 10.3, 3.7, 5.6], w: "porción de tarta de queso" },
   { key: "muffin", r: "casero", n: "Muffins caseros", u: "ud", g: 76, re: /muffin/, cat: "Caseros", nut: [146, 12.5, 12.4, 5.0], w: "muffins caseros" },
