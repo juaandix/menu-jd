@@ -435,3 +435,40 @@ input[type=search]{-webkit-appearance:none;appearance:none;padding-left:38px;
 .units .chip-opt{min-width:46px;justify-content:center}
 .chip-opt.on{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}
 .mult .btn{width:100%}
+
+/* Fotos de productos (miniaturas del catálogo y propias) */
+.thumb{width:40px;height:40px;border-radius:10px;object-fit:cover;background:var(--surface-2);display:block;flex:none}
+.thumb.ph{display:grid;place-items:center;color:var(--muted);font-weight:650;font-size:.95rem}
+.opt.has-thumb{grid-template-columns:40px 1fr auto}
+.entry.has-thumb{grid-template-columns:36px 1fr auto auto}
+.entry .thumb{width:36px;height:36px;border-radius:9px}
+.shop-item{grid-template-columns:24px 32px 1fr auto}
+.shop-item .thumb{width:32px;height:32px;border-radius:8px}
+.shop-item small{grid-column:4}
+.wlist.products li.has-thumb{grid-template-columns:40px 1fr 44px}
+.wlist.photos li{grid-template-columns:40px 1fr auto 44px}
+.wlist.photos li.empty{grid-template-columns:none}
+.wlist small{display:block;font-size:.75rem;color:var(--muted)}
+.wlist.photos .btn{min-height:40px;padding:8px 12px;font-size:.84rem}
+#photoSearch{margin-bottom:10px}
+.credits{margin-top:12px}
+.credits summary{cursor:pointer;color:var(--accent);font-size:.88rem;min-height:44px;display:flex;align-items:center}
+.credits a{color:var(--accent);overflow-wrap:anywhere}
+.photos li span{display:grid;padding:8px 0;gap:1px;min-width:0}
+
+/* Menú: pestañas Platos | Productos */
+.seg{display:grid;grid-template-columns:1fr 1fr;gap:4px;padding:4px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);margin-bottom:14px}
+.seg button{min-height:40px;border:0;border-radius:calc(var(--r-lg) - 4px);background:none;color:var(--muted);font:inherit;font-weight:620;font-size:.92rem;cursor:pointer}
+.seg button[aria-selected="true"]{background:var(--accent-strong);color:var(--accent-fg)}
+.products-only{display:none}
+#view-menu.show-products .products-only{display:block}
+#view-menu.show-products .dishes-only{display:none!important}
+.products-pane .cat-row{margin:10px 0 4px;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+.products-pane .cat-row::-webkit-scrollbar{display:none}
+.products-pane .cat-row .chip-opt{flex:none}
+.products-pane h3.recent-label{margin:16px 0 6px}
+.prod-head{display:grid;grid-template-columns:48px 1fr;gap:12px;align-items:center}
+.prod-head .thumb{width:48px;height:48px;border-radius:12px}
+.prod-head p{margin:0;display:grid;gap:2px}
+.slot-pick{margin:4px 0 10px}
+.products-pane .ed-options{max-height:none;overflow:visible}

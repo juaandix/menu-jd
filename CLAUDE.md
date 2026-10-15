@@ -186,6 +186,17 @@ Tests: abrir `http://localhost:8080/tests.html` (carga la app en un iframe y pru
 - Entradas del registro con ingredientes propios guardan `i` (por 1 ración) y `m`; la compra y el coste usan `x.i` antes que el plato de `ref`.
 - En Hoy, tocar una entrada abre su hoja: cambiar ración (recalcula desde los valores por ración = k/m), mover a otra franja, duplicar, ✎ ingredientes y borrar. Borrar (también con ✕) muestra un aviso con "Deshacer" (6 s).
 
+## Fotos de productos
+- Cada entrada de `SHOP` tiene foto genérica en `img/p/<key>.webp` (160×160, WebP q70, ~3–8 KB; ~530 KB las 145). Sacadas de Wikimedia Commons (solo CC0, dominio público, CC BY y CC BY-SA), recortadas al centro y reducidas; autor, licencia y enlace en `img/p/credits.json` (`{ key: { t, a, l, u } }`), visibles en Recetas → Fotos de productos → Créditos. Nada de fotos de la web de Mercadona ni con marcas visibles (derechos de autor; el repo es público).
+- **Entrada nueva en `SHOP` = añadir su foto y su crédito** (hay test que lo comprueba). Si se cambia una foto existente, subir `IMG_CACHE` en `sw.js`.
+- `sw.js`: las fotos van en una caché aparte (`IMG_CACHE = "menujd-img-v1"`, caché primero) que no se borra al subir la versión; se descargan al mostrarse (`loading="lazy"`), no se precachean.
+- Fotos propias: Recetas → Fotos de productos → "Tu foto" (cámara o galería; `<input type=file accept=image/*>`). `shrinkPhoto()` recorta al centro y reduce a 160×160 JPEG 0,75 (~8 KB) en un canvas; se guardan en `localStorage["menujd.photos.v1"] = { key: dataURL }`, comunes a los perfiles, mandan sobre la genérica. No van en la copia de seguridad. Mis productos solo tienen foto si se la haces.
+- `thumbHTML(c)` pinta la miniatura (o la inicial si no hay foto o no carga). Sale en: buscador de la hoja de añadir, editor (recomendados y lista), Me falta, lista de la compra, Mis productos y, en Hoy, las entradas de un solo ingrediente (`entryThumb`). Los platos no tienen foto.
+
+## Menú → Productos
+- Pestañas "Platos | Productos" arriba del Menú (`setMenuTab()`; clases `dishes-only` / `products-only` y `#view-menu.show-products`). Productos = todo el catálogo con macros (`foodOptions()`: SHOP + Mis productos, también las versiones cocidas), agrupado por categoría de la compra (`SHOP_CATS`), con buscador, filtro por categoría y foto.
+- Al tocar uno (`openProductSheet`) se abre la hoja de gramos/unidades (`openFoodGrams` con `sheetState.from = "menu"`) con selector de franja (`data-slot-pick`); se propone por la hora si el día abierto es hoy (`guessSlot()`), si no la primera. Se registra con `logFood` en el **día abierto en Hoy** (como "Monta tu día"), así que sirve para planificar días futuros.
+
 ## Despensa y atajos
 - **Me falta** (Menú, arriba): `localStorage["menujd.missing.v1"] = [claves de SHOP]`, común a los perfiles. Los platos que lo llevan salen con ⚠ y "Sustituir" (Menú: guarda el plato; hoja de añadir: "Sustituir solo para hoy"), con ⚠ en Monta tu día, y no se proponen en "lo de siempre", sugerencias ni Menú variado. Marcarlo como comprado en la lista de la compra lo quita.
 - **Copiar comidas de otro día** (Hoy): lista los 14 días anteriores con comidas; añade sin borrar, con Deshacer.

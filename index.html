@@ -61,8 +61,18 @@
         <h1>Menú</h1>
         <p class="lead" id="menuLead"></p>
       </header>
-      <div class="pantry" id="pantry"></div>
-      <div class="builder" id="builderSection">
+      <div class="seg" role="tablist" aria-label="Qué ver">
+        <button type="button" role="tab" id="tabDishes" data-mtab="platos" aria-selected="true">Platos</button>
+        <button type="button" role="tab" id="tabProducts" data-mtab="productos" aria-selected="false">Productos</button>
+      </div>
+      <div class="products-pane products-only" id="productsPane">
+        <input type="search" id="prodSearch" placeholder="Buscar producto…" autocomplete="off">
+        <div class="recent-row cat-row" id="prodCats"></div>
+        <p class="muted small" id="prodHint"></p>
+        <div id="prodList"></div>
+      </div>
+      <div class="pantry dishes-only" id="pantry"></div>
+      <div class="builder dishes-only" id="builderSection">
         <h2>Monta tu día</h2>
         <div class="sel">
           <label for="bD">Desayuno<select id="bD"></select></label>
@@ -74,7 +84,7 @@
         <button class="btn" id="bApply">Usar este plan para hoy</button>
         <p class="muted small">Se añade al día que tengas abierto en Hoy: navega a días futuros para planificar la semana y sacar la lista de la compra.</p>
       </div>
-      <div id="menuList"></div>
+      <div id="menuList" class="dishes-only"></div>
     </section>
 
     <!-- SEMANA -->
@@ -137,6 +147,17 @@
         <h2>Mis productos</h2>
         <p class="muted small">Ingredientes que has dado de alta con sus macros para usarlos al cambiar un plato. Son comunes a todos los perfiles de este móvil.</p>
         <ul id="productList" class="wlist products"></ul>
+      </section>
+      <section class="block">
+        <h2>Fotos de productos</h2>
+        <p class="muted small">Cada ingrediente del catálogo trae una foto genérica. Si quieres la del envase que compras, hazle una foto o elígela de la galería: se reduce a una miniatura y se guarda solo en este móvil (no va en la copia de seguridad).</p>
+        <input type="search" id="photoSearch" placeholder="Buscar producto…" autocomplete="off">
+        <ul id="photoList" class="wlist photos"></ul>
+        <input type="file" id="photoFile" accept="image/*" hidden>
+        <details id="photoCredits" class="credits"><summary>Créditos de las fotos genéricas</summary>
+          <p class="muted small">Fotos de Wikimedia Commons, recortadas y reducidas; cada una mantiene su licencia (CC0, dominio público, CC BY o CC BY-SA).</p>
+          <ul id="creditList" class="notes small"></ul>
+        </details>
       </section>
       <section class="block">
         <h2>Copia de seguridad</h2>

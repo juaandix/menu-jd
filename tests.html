@@ -207,6 +207,51 @@ async function run() {
     near(w.parseIng("1 lata de atún al natural (56 g)").grams, 56, 0.1);
   });
 
+  /* fotos */
+  await ta("Cada entrada del catálogo tiene su foto (img/p/clave.webp) y sus créditos", async () => {
+    const cr = await (await fetch("img/p/credits.json", { cache: "no-store" })).json();
+    const bad = [];
+    await Promise.all(SHOP.map(async (c) => {
+      const r = await fetch(`img/p/${c.key}.webp`, { method: "HEAD", cache: "no-store" });
+      if (!r.ok) bad.push(c.key + " (sin foto)");
+      if (!cr[c.key] || !cr[c.key].l || !cr[c.key].u) bad.push(c.key + " (sin créditos)");
+    }));
+    eq(bad.length, 0, bad.join(", "));
+  });
+
+  await ta("Foto propia: se recorta al centro y se reduce a 160×160 JPEG", async () => {
+    const cv = document.createElement("canvas"); cv.width = 600; cv.height = 300;
+    const blob = await new Promise((r) => cv.toBlob(r, "image/png"));
+    const data = await w.shrinkPhoto(blob);
+    eq(data.startsWith("data:image/jpeg"), true, "formato");
+    const img = new Image(); await new Promise((r) => { img.onload = r; img.src = data; });
+    eq(img.naturalWidth + "×" + img.naturalHeight, "160×160");
+    if (data.length > 30000) throw new Error("demasiado grande: " + data.length);
+  });
+
+  /* Menú → Productos */
+  t("Menú → Productos: añadir 2 manzanas a la merienda de un día (y se deja como estaba)", () => {
+    const key = "2020-01-02", prevCur = E("iso(current)"), prevProfile = E("profile.id");
+    E("profile = PROFILES.jd; rebuildIndex();");
+    E(`current = new Date("${key}T12:00:00")`);
+    try {
+      E('setMenuTab("productos")');
+      const d = w.document;
+      if (!d.querySelector('[data-prod-add="manzana|0"] img.thumb')) throw new Error("la manzana no sale con foto en la lista");
+      E('openProductSheet("manzana|0")');
+      eq(E("sheetState.slot"), "D", "franja propuesta en un día que no es hoy");
+      d.querySelector('[data-slot-pick="S"]').click();
+      eq(d.getElementById("ffGo").textContent, "Añadir a Snack");
+      d.querySelector('[data-u-set="2"]').click();
+      d.getElementById("foodForm").requestSubmit();
+      const it = E(`db["${key}"].items`);
+      eq(it.length, 1); eq(it[0].slot, "S"); eq(it[0].i[0], "360 g de manzana (2 ud)"); near(it[0].k, 187.2, 0.5);
+    } finally {
+      E(`delete db["${key}"]; saveAll(db); current = new Date("${prevCur}T12:00:00"); closeSheet(); setMenuTab("platos");`);
+      E(`profile = PROFILES.${prevProfile}; rebuildIndex(); renderHoy();`);
+    }
+  });
+
   /* comidas → Google Health (API simulada: no sale nada a internet) */
   {
     const prevProfile = E("profile.id"), realFetch = w.fetch, key = "2020-01-01";

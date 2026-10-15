@@ -23,6 +23,7 @@ const ICONS = {
   external: '<path d="M14 4h6v6M20 4l-9 9"/><path d="M18 14v4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4"/>',
   spark: '<path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M5.6 18.4l2.8-2.8M15.6 8.4l2.8-2.8"/>',
   upload: '<path d="M12 15V4"/><path d="m7 9 5-5 5 5"/><path d="M5 20h14"/>',
+  camera: '<path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/>',
 };
 const ico = (name, cls = "") => `<svg class="i${cls ? " " + cls : ""}" viewBox="0 0 24 24" aria-hidden="true">${ICONS[name]}</svg>`;
 function nameHTML(n) { const x = splitName(n); return esc(x.t) + (x.tag ? ` <span class="tag">${esc(x.tag)}</span>` : ""); }
@@ -163,7 +164,7 @@ function renderHoy() {
       <div class="slot-head"><h3>${s.label}<small>${items.length ? `<b>${r0(st.k)} kcal · ${r0(st.p)} g P</b> · ${hint}` : hint}</small></h3>
         <button class="add-btn" data-add="${s.id}" aria-label="Añadir a ${s.label}">+ Añadir</button></div>
       ${items.length ? items.map((x) => `
-        <div class="entry"><button class="name" type="button" data-entry="${x.idx}" aria-label="Editar ${esc(x.n)}"><b>${nameHTML(x.n)}</b><span>${x.ref ? x.ref + " · " : ""}P ${f1(x.p)} · C ${r0(x.c || 0)} · G ${r0(x.f || 0)}${costLabel(itemDishCost(x)) ? " · " + costLabel(itemDishCost(x)) : ""}${x.i ? " · editado" : ""}</span></button>
+        <div class="entry${entryThumb(x) ? " has-thumb" : ""}">${entryThumb(x)}<button class="name" type="button" data-entry="${x.idx}" aria-label="Editar ${esc(x.n)}"><b>${nameHTML(x.n)}</b><span>${x.ref ? x.ref + " · " : ""}P ${f1(x.p)} · C ${r0(x.c || 0)} · G ${r0(x.f || 0)}${costLabel(itemDishCost(x)) ? " · " + costLabel(itemDishCost(x)) : ""}${x.i ? " · editado" : ""}</span></button>
           <span class="kc">${r0(x.k)}</span>
           <button class="del" data-del="${x.idx}" aria-label="Quitar ${esc(x.n)}">${ico("x")}</button></div>`).join("")
       : fav ? `<button class="chip-opt fav" data-fav="${fav.o.id}|${fav.m}"><span>${ico("plus")} Lo de siempre: ${esc(splitName(withPortion(fav.o.n, fav.m)).t)}</span><small>${r0(fav.o.k * fav.m)} kcal</small></button>` : ""}
@@ -392,7 +393,7 @@ function renderFoodRow(q) {
   const opts = foodOptions().filter((o) => { const t = norm(o.label); return t.includes(nq) || (words.length && words.every((w) => t.includes(w))); })
     .map((o) => { const t = norm(o.label); return { o, s: (o.c.user ? 0 : 4) + (t === nq ? 0 : t.startsWith(nq) ? 1 : 2) + t.length / 100 }; })
     .sort((a, b) => a.s - b.s).map((x) => x.o).slice(0, 6);
-  box.innerHTML = (opts.length ? `<div class="recent-label">Ingredientes y tus productos</div><div class="ed-options">${opts.map((o) => `<button class="opt rec" data-food-log="${o.id}"><span>${esc(o.label)}${o.c.user ? `<small>tu producto</small>` : ""}</span><span class="kc">${r0(o.nut[0])} kcal<br>${f1(o.nut[1])} g P /100 g</span></button>`).join("")}</div>` : "")
+  box.innerHTML = (opts.length ? `<div class="recent-label">Ingredientes y tus productos</div><div class="ed-options">${opts.map((o) => `<button class="opt rec has-thumb" data-food-log="${o.id}">${thumbHTML(o.c)}<span>${esc(o.label)}${o.c.user ? `<small>tu producto</small>` : ""}</span><span class="kc">${r0(o.nut[0])} kcal<br>${f1(o.nut[1])} g P /100 g</span></button>`).join("")}</div>` : "")
     + `<button class="btn ghost web-btn" type="button" data-web-search="1">${ico("search")} Buscar «${esc(q.trim())}» en Google</button>
     <p class="muted small">Abre Google con sus macros por 100 g; al volver tendrás el formulario preparado para apuntarlos.</p>`;
 }
@@ -447,7 +448,8 @@ function logFood(optId, g) {
   const m = ingMacros(txt) || { k: (o.nut[0] * gr) / 100, p: (o.nut[1] * gr) / 100, c: (o.nut[2] * gr) / 100, f: (o.nut[3] * gr) / 100 };
   const n = o.c.g && o.c.u === "ud" ? `${o.label} · ${f1(g / o.c.g)} ud` : `${o.label} (${fmtG(g)} ${u})`;
   addItem(sheetState.slot, { n, i: [txt], m: 1, ...scaled(m, 1) });
-  afterDishChange(); closeSheet(); toast("Añadido: " + n);
+  afterDishChange(); closeSheet();
+  toast(sheetState.from === "menu" ? `Añadido a ${profile.slots.find((s) => s.id === sheetState.slot).label} · ${dayLabel(current).split(" · ")[0]}` : "Añadido: " + n);
 }
 // Contador de unidades para ingredientes que se cuentan por piezas (muffins, huevos, yogures…): rellena los gramos.
 function unitsHTML(o, target) {
@@ -492,13 +494,16 @@ function openFoodGrams(optId) {
   const o = foodOptions().find((x) => x.id === optId);
   if (!o) return;
   $("#sheetBody").innerHTML = `
-    <button class="back-link" type="button" data-web-back="1">${ico("back")} Volver a la búsqueda</button>
+    ${sheetState.from === "menu" ? "" : `<button class="back-link" type="button" data-web-back="1">${ico("back")} Volver a la búsqueda</button>`}
     <form id="foodForm" class="portion-card" data-opt="${o.id}">
-      <p><b>${esc(o.label)}</b> <span class="muted small">(${r0(o.nut[0])} kcal · ${f1(o.nut[1])} g P por 100 g)</span></p>
+      ${sheetState.from === "menu" ? `<div class="prod-head">${thumbHTML(o.c)}<p><b>${esc(o.label)}</b><span class="muted small">${r0(o.nut[0])} kcal · ${f1(o.nut[1])} g P por 100 g</span></p></div>
+      <p class="muted small">Se añade a <b>${esc(dayLabel(current))}</b> (el día abierto en Hoy).</p>
+      <div class="recent-row slot-pick">${profile.slots.map((s) => `<button type="button" class="chip-opt${s.id === sheetState.slot ? " on" : ""}" data-slot-pick="${s.id}">${esc(s.label)}</button>`).join("")}</div>`
+        : `<p><b>${esc(o.label)}</b> <span class="muted small">(${r0(o.nut[0])} kcal · ${f1(o.nut[1])} g P por 100 g)</span></p>`}
       ${unitsHTML(o, "ffG")}
       <label for="ffG">${o.c.u === "ml" ? "Mililitros" : "Gramos"}<input type="text" inputmode="decimal" id="ffG" value="${o.c.g || (o.c.u === "ml" ? 200 : 100)}"></label>
       <p class="ed-sum" id="ffPrev"></p>
-      <button class="btn" type="submit">Registrar</button>
+      <button class="btn" type="submit" id="ffGo">${sheetState.from === "menu" ? `Añadir a ${esc(profile.slots.find((s) => s.id === sheetState.slot).label)}` : "Registrar"}</button>
     </form>`;
   const prev = () => { const g = (parseFloat($("#ffG").value.replace(",", ".")) || 0) * (o.c.u === "ml" ? o.c.dens || 1 : 1); $("#ffPrev").innerHTML = g ? `<b>${macrosTxt({ k: o.nut[0] * g / 100, p: o.nut[1] * g / 100, c: o.nut[2] * g / 100, f: o.nut[3] * g / 100 })}</b>` : ""; };
   $("#ffG").addEventListener("input", () => { prev(); syncUnits(); }); prev(); syncUnits();
@@ -520,6 +525,94 @@ function openPortionStep(dishId) {
     </div>`;
 }
 function closeSheet() { $("#sheet").hidden = true; $("#sheetBg").hidden = true; }
+
+/* ---------- fotos de productos ----------
+   Catálogo: img/p/<key>.webp (160×160, Wikimedia Commons; autor y licencia en img/p/credits.json). Se descargan al
+   mostrarse y sw.js las guarda en una caché aparte que no se borra al cambiar de versión.
+   Propias: hechas o elegidas en el móvil, reducidas a 160×160 JPEG y guardadas en localStorage["menujd.photos.v1"] =
+   { clave: dataURL }, comunes a los perfiles. Mandan sobre la del catálogo. No van en la copia de seguridad. */
+const PHOTO_PX = 160;
+function photosKey() { return "menujd.photos.v1"; }
+let photoCache = null;
+function loadPhotos() {
+  if (!photoCache) { try { photoCache = JSON.parse(localStorage.getItem(photosKey())) || {}; } catch { photoCache = {}; } }
+  return photoCache;
+}
+function savePhotos(p) {
+  try { localStorage.setItem(photosKey(), JSON.stringify(p)); photoCache = p; return true; }
+  catch { toast("No queda espacio para más fotos en este móvil"); return false; }
+}
+function photoSrc(c) {
+  if (!c) return null;
+  return loadPhotos()[c.key] || (c.user ? null : `img/p/${c.key}.webp`);
+}
+// Miniatura cuadrada; sin foto, la inicial sobre un fondo neutro (y lo mismo si la imagen no carga).
+function thumbHTML(c) {
+  const src = photoSrc(c), ini = esc(((c && c.n) || "?").charAt(0).toUpperCase());
+  return src ? `<img class="thumb" src="${src}" alt="" loading="lazy" decoding="async" data-ini="${ini}" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'thumb ph',textContent:this.dataset.ini}))">`
+    : `<span class="thumb ph" aria-hidden="true">${ini}</span>`;
+}
+// En Hoy, solo para lo registrado como un único ingrediente (fruta, un yogur…): los platos no tienen foto.
+function entryThumb(x) {
+  if (!x.i || x.i.length !== 1) return "";
+  const { c } = parseIng(x.i[0]);
+  return c ? thumbHTML(c) : "";
+}
+// Recorta al centro y reduce a 160×160 JPEG (~8 KB): admite fotos de cámara (también HEIC en iPhone) y de la galería.
+function shrinkPhoto(file) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file), img = new Image();
+    img.onload = () => {
+      const side = Math.min(img.naturalWidth, img.naturalHeight);
+      const cv = document.createElement("canvas"); cv.width = cv.height = PHOTO_PX;
+      cv.getContext("2d").drawImage(img, (img.naturalWidth - side) / 2, (img.naturalHeight - side) / 2, side, side, 0, 0, PHOTO_PX, PHOTO_PX);
+      URL.revokeObjectURL(url);
+      resolve(cv.toDataURL("image/jpeg", 0.75));
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("No se pudo leer la foto")); };
+    img.src = url;
+  });
+}
+let photoTarget = null;
+function renderPhotoList() {
+  const box = $("#photoList");
+  if (!box) return;
+  const q = norm(($("#photoSearch").value || "").trim()), own = loadPhotos();
+  const list = catalog().filter((c) => !q || norm(c.n).includes(q))
+    .sort((a, b) => !!own[b.key] - !!own[a.key] || a.n.localeCompare(b.n, "es"));
+  const shown = q ? list : list.slice(0, 12);
+  box.innerHTML = shown.map((c) => `<li class="has-thumb">${thumbHTML(c)}<span><b>${esc(c.n)}</b><small>${own[c.key] ? "foto tuya" : c.user ? "sin foto" : "foto genérica"}</small></span>
+      <button class="btn ghost small" type="button" data-photo-take="${c.key}">${ico("camera")} ${own[c.key] ? "Cambiar" : "Tu foto"}</button>
+      ${own[c.key] ? `<button class="del" type="button" data-photo-del="${c.key}" aria-label="Quitar tu foto de ${esc(c.n)}">${ico("x")}</button>` : "<span></span>"}</li>`).join("")
+    + (!q && list.length > shown.length ? `<li class="empty">Busca para ver los ${list.length - shown.length} restantes.</li>` : "")
+    + (q && !list.length ? `<li class="empty">Nada con «${esc(q)}».</li>` : "");
+}
+$("#photoSearch").addEventListener("input", renderPhotoList);
+$("#photoList").addEventListener("click", (e) => {
+  const take = e.target.closest("[data-photo-take]"), del = e.target.closest("[data-photo-del]");
+  if (take) { photoTarget = take.dataset.photoTake; $("#photoFile").value = ""; $("#photoFile").click(); }
+  if (del) {
+    const p = { ...loadPhotos() }; delete p[del.dataset.photoDel];
+    if (savePhotos(p)) { renderPhotoList(); toast("Vuelve la foto genérica"); }
+  }
+});
+$("#photoFile").addEventListener("change", async (e) => {
+  const file = e.target.files && e.target.files[0];
+  if (!file || !photoTarget) return;
+  try {
+    const data = await shrinkPhoto(file);
+    if (savePhotos({ ...loadPhotos(), [photoTarget]: data })) { renderPhotoList(); renderProducts(); toast("Foto guardada"); }
+  } catch (err) { toast(err.message || "No se pudo guardar la foto"); }
+  photoTarget = null;
+});
+$("#photoCredits").addEventListener("toggle", async (e) => {
+  if (!e.target.open || $("#creditList").childElementCount) return;
+  try {
+    const cr = await (await fetch("img/p/credits.json")).json();
+    $("#creditList").innerHTML = SHOP.filter((c) => cr[c.key]).map((c) => { const x = cr[c.key];
+      return `<li><b>${esc(c.n)}</b>: <a href="${esc(x.u)}" target="_blank" rel="noopener">${esc(x.t)}</a> · ${esc(x.a)} · ${esc(x.l)}</li>`; }).join("");
+  } catch { $("#creditList").innerHTML = "<li>Sin conexión: no se pudieron cargar los créditos.</li>"; }
+});
 
 /* ---------- ingredientes: compra y coste ---------- */
 // Convierte "2 latas atún al natural (112 g)" en { c: entrada de SHOP, qty: 112 } en la unidad de compra de esa entrada.
@@ -662,10 +755,55 @@ function openMissingSheet() {
 function renderMissingList() {
   const q = norm(sheetState.query || ""), miss = loadMissing();
   const list = catalog().filter((c) => !q || norm(c.n).includes(q)).sort((a, b) => miss.includes(b.key) - miss.includes(a.key) || a.n.localeCompare(b.n, "es"));
-  $("#missList").innerHTML = list.map((c) => `<button class="opt${miss.includes(c.key) ? " is-miss" : ""}" data-miss-toggle="${c.key}"><span>${esc(c.n)}</span><span class="kc">${miss.includes(c.key) ? "no tengo" : ""}</span></button>`).join("")
+  $("#missList").innerHTML = list.map((c) => `<button class="opt has-thumb${miss.includes(c.key) ? " is-miss" : ""}" data-miss-toggle="${c.key}">${thumbHTML(c)}<span>${esc(c.n)}</span><span class="kc">${miss.includes(c.key) ? "no tengo" : ""}</span></button>`).join("")
     || `<p class="empty">Nada con "${esc(sheetState.query)}".</p>`;
 }
 function afterMissingChange() { renderPantry(); renderMenuList(); if (profile.builder) fillBuilder(); }
+/* ---------- Menú → Productos: el catálogo con fotos para añadir algo suelto a una comida del día abierto ---------- */
+let menuTab = "platos", prodCat = "";
+function setMenuTab(tab) {
+  menuTab = tab;
+  $("#view-menu").classList.toggle("show-products", tab === "productos");
+  $("#tabDishes").setAttribute("aria-selected", tab === "platos");
+  $("#tabProducts").setAttribute("aria-selected", tab === "productos");
+  if (tab === "productos") renderProductsPane();
+}
+// Franja propuesta según la hora (en días que no son hoy, la primera): el usuario la cambia en la hoja.
+function guessSlot() {
+  const ids = profile.slots.map((s) => s.id);
+  if (iso(current) !== iso(new Date())) return ids[0];
+  const h = new Date().getHours();
+  const want = h < 11 ? ["D"] : h < 13 ? ["M", "C"] : h < 16 ? ["C"] : h < 20 ? ["Me", "S"] : ["N"];
+  return want.find((id) => ids.includes(id)) || ids[0];
+}
+function renderProductsPane() {
+  const q = norm(($("#prodSearch").value || "").trim()), opts = foodOptions();
+  const cats = SHOP_CATS.filter((cat) => opts.some((o) => o.c.cat === cat));
+  $("#prodCats").innerHTML = [["", "Todo"], ...cats.map((c) => [c, c])].map(([v, l]) => `<button type="button" class="chip-opt${v === prodCat ? " on" : ""}" data-prod-cat="${esc(v)}">${esc(l)}</button>`).join("");
+  const list = opts.filter((o) => (!prodCat || o.c.cat === prodCat) && (!q || norm(o.label).includes(q)));
+  $("#prodHint").textContent = `Toca uno para añadirlo a una comida de ${dayLabel(current).split(" · ")[0].toLowerCase()}.`;
+  const row = (o) => `<button class="opt rec has-thumb" data-prod-add="${o.id}">${thumbHTML(o.c)}<span>${esc(o.label)}${o.c.g && o.c.u === "ud" ? `<small>1 ud ≈ ${o.c.g} g</small>` : ""}</span><span class="kc">${r0(o.nut[0])} kcal<br>${f1(o.nut[1])} g P /100 g</span></button>`;
+  const groups = q || prodCat ? [[null, list]] : cats.map((cat) => [cat, list.filter((o) => o.c.cat === cat)]);
+  $("#prodList").innerHTML = list.length
+    ? groups.map(([cat, l]) => `${cat ? `<h3 class="recent-label">${esc(cat)}</h3>` : ""}<div class="ed-options">${[...l].sort((a, b) => a.label.localeCompare(b.label, "es")).map(row).join("")}</div>`).join("")
+    : `<p class="empty">Nada con «${esc($("#prodSearch").value.trim())}». Puedes buscarlo en Google desde Hoy → Añadir.</p>`;
+}
+function openProductSheet(optId) {
+  const o = foodOptions().find((x) => x.id === optId);
+  if (!o) return;
+  sheetState = { slot: guessSlot(), query: "", from: "menu" };
+  $("#sheetTitle").textContent = "Añadir producto";
+  openFoodGrams(optId);
+  $("#sheet").hidden = false; $("#sheetBg").hidden = false;
+}
+$("#view-menu").addEventListener("click", (e) => {
+  const tab = e.target.closest("[data-mtab]"), cat = e.target.closest("[data-prod-cat]"), add = e.target.closest("[data-prod-add]");
+  if (tab) setMenuTab(tab.dataset.mtab);
+  else if (cat) { prodCat = cat.dataset.prodCat; renderProductsPane(); }
+  else if (add) openProductSheet(add.dataset.prodAdd);
+});
+$("#prodSearch").addEventListener("input", renderProductsPane);
+
 function renderMenuList() {
   $("#menuList").innerHTML = profile.slots.map((s) => `
     <section class="group"><h2>${s.label}s<small>${s.hint}</small></h2>
@@ -676,6 +814,7 @@ function renderMenu() {
     ? "Cualquier combinación de desayuno, comida y cena da aproximadamente lo mismo. Los snacks ajustan al objetivo del día."
     : "Plan de referencia: cada tarjeta es uno de los platos de tu plan, con sus kcal, proteína, carbohidratos y grasa.";
   renderPantry(); renderMenuList();
+  if (menuTab === "productos") renderProductsPane();
 
   $("#builderSection").hidden = !profile.builder;
   if (!profile.builder) return;
@@ -885,7 +1024,7 @@ function renderRecs() {
   if (!box) return;
   const recs = ed.idx != null && !ed.q ? substitutes(ed.i[ed.idx]) : [];
   box.innerHTML = recs.length ? `<p class="recent-label">Recomendados para sustituirlo</p>
-    <div class="ed-options">${recs.map((r) => `<button class="opt rec" data-ed-pick="${r.opt.id}"><span>${esc(r.opt.label)}<small>${fmtG(r.g)} g → ${r0(r.n.k)} kcal · ${f1(r.n.p)} g P · C ${r0(r.n.c)} · G ${r0(r.n.f)}</small></span><span class="kc">${r.fit < 3 ? "encaja" : r.fit < 15 ? "parecido" : "aprox."}</span></button>`).join("")}</div>
+    <div class="ed-options">${recs.map((r) => `<button class="opt rec has-thumb" data-ed-pick="${r.opt.id}">${thumbHTML(r.opt.c)}<span>${esc(r.opt.label)}<small>${fmtG(r.g)} g → ${r0(r.n.k)} kcal · ${f1(r.n.p)} g P · C ${r0(r.n.c)} · G ${r0(r.n.f)}</small></span><span class="kc">${r.fit < 3 ? "encaja" : r.fit < 15 ? "parecido" : "aprox."}</span></button>`).join("")}</div>
     <p class="recent-label">Todos los ingredientes</p>` : "";
 }
 function renderPickerOptions() {
@@ -894,7 +1033,7 @@ function renderPickerOptions() {
   const list = foodOptions().filter((o) => !q || norm(o.label).includes(q) || norm(o.cooked ? o.c.cooked.w : o.c.w || "").includes(q));
   const missSet = new Set(loadMissing());
   $("#edOptions").innerHTML = list.length
-    ? list.map((o) => `<button class="opt" data-ed-pick="${o.id}"><span>${esc(o.label)}${missSet.has(o.c.key) ? `<small class="miss-mark">no lo tienes</small>` : ""}</span><span class="kc">${r0(o.nut[0])} kcal<br>${f1(o.nut[1])} g P</span></button>`).join("")
+    ? list.map((o) => `<button class="opt has-thumb" data-ed-pick="${o.id}">${thumbHTML(o.c)}<span>${esc(o.label)}${missSet.has(o.c.key) ? `<small class="miss-mark">no lo tienes</small>` : ""}</span><span class="kc">${r0(o.nut[0])} kcal<br>${f1(o.nut[1])} g P</span></button>`).join("")
     : `<p class="empty">Nada con "${esc(ed.q)}". Créalo abajo con sus macros.</p>`;
 }
 function openGrams(optId) {
@@ -1002,7 +1141,7 @@ function afterDishChange() {
 function renderProducts() {
   const list = userProducts();
   $("#productList").innerHTML = list.length
-    ? list.map((p) => `<li><span><b>${esc(p.n)}</b><small>${p.nut[0]} kcal · P ${p.nut[1]} · C ${p.nut[2]} · G ${p.nut[3]} /100 g${p.g ? ` · ${p.g} g/ud` : ""}${p.r && ROLE_LABELS[p.r] ? ` · ${ROLE_LABELS[p.r]}` : ""}</small></span><button class="del" data-prod-del="${p.key}" aria-label="Borrar ${esc(p.n)}">${ico("x")}</button></li>`).join("")
+    ? list.map((p) => `<li class="has-thumb">${thumbHTML(productEntry(p))}<span><b>${esc(p.n)}</b><small>${p.nut[0]} kcal · P ${p.nut[1]} · C ${p.nut[2]} · G ${p.nut[3]} /100 g${p.g ? ` · ${p.g} g/ud` : ""}${p.r && ROLE_LABELS[p.r] ? ` · ${ROLE_LABELS[p.r]}` : ""}</small></span><button class="del" data-prod-del="${p.key}" aria-label="Borrar ${esc(p.n)}">${ico("x")}</button></li>`).join("")
     : `<li class="empty">Aún no hay ninguno. Se crean desde «Cambiar» en un plato del Menú o buscando en Google desde Añadir.</li>`;
 }
 
@@ -1013,6 +1152,7 @@ function renderRecetas() {
     <div class="macros"><span>${x.m}</span></div></article>`).join("");
   $("#notes").innerHTML = profile.notes.map((n) => `<li>${n}</li>`).join("");
   renderProducts();
+  renderPhotoList();
   $("#gcalSection").hidden = !profile.calendar && !profile.health;
   $("#healthHelp").hidden = !profile.health;
 }
@@ -1285,7 +1425,7 @@ function renderShop(rows) {
       if (a.qty) { if (v == null) missing++; else { total += v; priced++; } }
       const on = checks.includes(a.c.key);
       return `<label class="shop-item${on ? " done" : ""}"><input type="checkbox" data-shop="${a.c.key}"${on ? " checked" : ""}>
-        <span>${esc(a.c.n)}</span><b>${qtyFmt(a.c, a.qty)}${a.gusto && a.qty ? " + al gusto" : ""}</b>${v != null ? `<small>${eurFmt(v)}</small>` : ""}</label>`;
+        ${thumbHTML(a.c)}<span>${esc(a.c.n)}</span><b>${qtyFmt(a.c, a.qty)}${a.gusto && a.qty ? " + al gusto" : ""}</b>${v != null ? `<small>${eurFmt(v)}</small>` : ""}</label>`;
     }).join("")}</div>`;
   }).join("");
   const others = loose.size ? `<div class="shop-group"><h3>Otros</h3>${[...loose.keys()].map((raw) => `<p class="shop-loose">${esc(raw)}</p>`).join("")}</div>` : "";
@@ -1443,6 +1583,11 @@ document.addEventListener("click", (e) => {
     afterDishChange(); renderProducts(); toast("Producto borrado");
   }
   else if (b.dataset.uStep || b.dataset.uSet) stepUnits(b);
+  else if (b.dataset.slotPick) {
+    sheetState.slot = b.dataset.slotPick;
+    b.parentElement.querySelectorAll("[data-slot-pick]").forEach((x) => x.classList.toggle("on", x === b));
+    $("#ffGo").textContent = "Añadir a " + profile.slots.find((s) => s.id === sheetState.slot).label;
+  }
   else if (b.dataset.mStep) stepMult(b);
   else if (b.dataset.webSearch) {
     // Se abre Google en otra pestaña y la hoja se queda con el formulario listo para cuando vuelvas.
@@ -2030,7 +2175,7 @@ async function autoFood() {
 document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") autoFood(); });
 window.addEventListener("online", autoFood);
 
-const APP_VERSION = "v22"; // igual que CACHE en sw.js
+const APP_VERSION = "v24"; // igual que CACHE en sw.js
 $("#appVersion").textContent = "Versión de la app: " + APP_VERSION;
 
 /* arranque */

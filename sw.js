@@ -1,5 +1,7 @@
 // Sube la versión cada vez que cambies archivos para que los móviles descarguen la nueva.
-const CACHE = "menujd-v22";
+const CACHE = "menujd-v24";
+// Fotos de productos: caché aparte que no se borra al cambiar de versión (se bajan una vez, al mostrarse).
+const IMG_CACHE = "menujd-img-v1";
 const ASSETS = [
   "./", "index.html", "styles.css", "data.js", "app.js", "manifest.webmanifest",
   "icons/icon-192.png", "icons/icon-512.png", "icons/icon-maskable-512.png", "icons/apple-touch-icon.png",
@@ -11,7 +13,7 @@ self.addEventListener("install", (e) => {
 
 self.addEventListener("activate", (e) => {
   e.waitUntil(
-    caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
+    caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== CACHE && k !== IMG_CACHE).map((k) => caches.delete(k))))
       .then(() => self.clients.claim())
   );
 });
@@ -20,7 +22,16 @@ self.addEventListener("activate", (e) => {
 // Las peticiones a otros orígenes (p. ej. Google Calendar) se dejan pasar sin interceptar ni cachear.
 self.addEventListener("fetch", (e) => {
   if (e.request.method !== "GET") return;
-  if (new URL(e.request.url).origin !== self.location.origin) return;
+  const url = new URL(e.request.url);
+  if (url.origin !== self.location.origin) return;
+  // Fotos: caché primero (no cambian); si se sustituye una, hay que subir IMG_CACHE.
+  if (url.pathname.includes("/img/p/") && url.pathname.endsWith(".webp")) {
+    e.respondWith(caches.open(IMG_CACHE).then((c) => c.match(e.request).then((m) => m || fetch(e.request).then((res) => {
+      if (res.ok) c.put(e.request, res.clone());
+      return res;
+    }))));
+    return;
+  }
   e.respondWith(
     fetch(e.request)
       .then((res) => {
