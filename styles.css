@@ -130,7 +130,7 @@ input[type=search]{-webkit-appearance:none;appearance:none;padding-left:38px;
 .ring svg{width:100%;height:100%;display:block}
 .ring circle{fill:none;stroke-width:10}
 .ring-track{stroke:var(--track)}
-.ring-val{stroke:var(--accent-strong);stroke-linecap:round;transition:stroke-dasharray .5s ease}
+.ring-val{stroke:var(--accent-strong);stroke-linecap:round;transition:stroke-dasharray .5s cubic-bezier(.2,.8,.2,1)}
 .ring.over .ring-val{stroke:var(--warm)}
 .ring-c{position:absolute;inset:0;display:grid;place-content:center;text-align:center;gap:1px}
 .ring-c strong{font-family:var(--display);font-size:1.85rem;font-weight:700;letter-spacing:-.03em;line-height:1}
@@ -156,7 +156,7 @@ input[type=search]{-webkit-appearance:none;appearance:none;padding-left:38px;
 .m-c .dot{background:var(--m-c)}
 .m-f .dot{background:var(--m-f)}
 .bar{height:8px;border-radius:99px;background:var(--track);overflow:hidden}
-.bar i{display:block;height:100%;border-radius:99px;background:var(--accent-strong);transition:width .4s ease}
+.bar i{display:block;height:100%;border-radius:99px;background:var(--accent-strong);transition:width .4s cubic-bezier(.2,.8,.2,1)}
 .bar.over i{background:var(--warm)}
 .mini-row{display:flex;flex-wrap:wrap;gap:4px 18px;font-size:.84rem;color:var(--muted);margin:0}
 .mini-row b{color:var(--fg);font-weight:650}
@@ -206,7 +206,7 @@ input[type=search]{-webkit-appearance:none;appearance:none;padding-left:38px;
 .sheet{position:fixed;left:0;right:0;bottom:0;z-index:31;max-height:88vh;overflow:auto;background:var(--bg-elev);
   border-radius:24px 24px 0 0;border:1px solid var(--line);border-bottom:0;box-shadow:0 -16px 50px rgba(0,0,0,.45);
   padding:8px 16px calc(env(safe-area-inset-bottom,0px) + 18px);
-  max-width:720px;margin:0 auto;display:grid;gap:12px;align-content:start;animation:rise .25s cubic-bezier(.2,.8,.2,1)}
+  max-width:720px;margin:0 auto;display:grid;gap:12px;align-content:start;overscroll-behavior:contain;animation:rise .25s cubic-bezier(.2,.8,.2,1)}
 .sheet::before{content:"";width:38px;height:5px;border-radius:3px;background:var(--line-2);justify-self:center;margin-bottom:2px}
 .sheet-head{display:flex;justify-content:space-between;align-items:center;gap:10px;position:sticky;top:-8px;background:var(--bg-elev);padding-block:6px;z-index:1}
 .sheet-head h2{font-size:1.15rem;min-width:0;overflow-wrap:anywhere}
@@ -214,6 +214,7 @@ input[type=search]{-webkit-appearance:none;appearance:none;padding-left:38px;
 .sheet-head .icon-btn .i{width:17px;height:17px}
 @keyframes rise{from{transform:translateY(24px);opacity:.6}to{transform:none;opacity:1}}
 @keyframes fade{from{opacity:0}to{opacity:1}}
+@keyframes toast-in{from{transform:translate(-50%,12px);opacity:0}to{transform:translate(-50%,0);opacity:1}}
 #sheetBody{display:grid;gap:12px;min-width:0}
 #sheetBody .row .btn,#sheetBody .portion-card > .btn,#sheetBody form > .btn{flex:1 1 auto}
 #sheetBody .row .btn{min-width:46%}
@@ -250,7 +251,7 @@ input[type=search]{-webkit-appearance:none;appearance:none;padding-left:38px;
 /* toast */
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(var(--tabbar-h) + env(safe-area-inset-bottom,0px) + 14px);
   background:#f3f6fc;color:#0b1426;padding:11px 18px;border-radius:14px;font-size:.9rem;font-weight:550;z-index:40;max-width:calc(100% - 32px);
-  box-shadow:0 10px 30px rgba(0,0,0,.4);animation:rise .2s ease}
+  box-shadow:0 10px 30px rgba(0,0,0,.4);animation:toast-in .2s cubic-bezier(.2,.8,.2,1)}
 .toast-act{border:0;background:none;color:var(--accent-strong);font:inherit;font-weight:700;margin-left:8px;padding:6px 4px;cursor:pointer}
 
 /* ---------- Menú ---------- */
@@ -472,3 +473,7 @@ input[type=search]{-webkit-appearance:none;appearance:none;padding-left:38px;
 .prod-head p{margin:0;display:grid;gap:2px}
 .slot-pick{margin:4px 0 10px}
 .products-pane .ed-options{max-height:none;overflow:visible}
+
+/* Revisión con las Web Interface Guidelines de Vercel */
+button,a,label,input,select,summary{touch-action:manipulation}
+.products-pane .opt{content-visibility:auto;contain-intrinsic-size:auto 60px}

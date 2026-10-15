@@ -4,3 +4,6 @@ menu-jd-pwa.zip
 Captura*.png
 Captura de pantalla*.png
 Receipt-*.pdf
+.claude/
+IMG_*.PNG
+.playwright-cli/

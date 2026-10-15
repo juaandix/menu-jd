@@ -549,7 +549,7 @@ function photoSrc(c) {
 // Miniatura cuadrada; sin foto, la inicial sobre un fondo neutro (y lo mismo si la imagen no carga).
 function thumbHTML(c) {
   const src = photoSrc(c), ini = esc(((c && c.n) || "?").charAt(0).toUpperCase());
-  return src ? `<img class="thumb" src="${src}" alt="" loading="lazy" decoding="async" data-ini="${ini}" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'thumb ph',textContent:this.dataset.ini}))">`
+  return src ? `<img class="thumb" src="${src}" alt="" width="40" height="40" loading="lazy" decoding="async" data-ini="${ini}" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'thumb ph',textContent:this.dataset.ini}))">`
     : `<span class="thumb ph" aria-hidden="true">${ini}</span>`;
 }
 // En Hoy, solo para lo registrado como un único ingrediente (fruta, un yogur…): los platos no tienen foto.
@@ -592,8 +592,8 @@ $("#photoList").addEventListener("click", (e) => {
   const take = e.target.closest("[data-photo-take]"), del = e.target.closest("[data-photo-del]");
   if (take) { photoTarget = take.dataset.photoTake; $("#photoFile").value = ""; $("#photoFile").click(); }
   if (del) {
-    const p = { ...loadPhotos() }; delete p[del.dataset.photoDel];
-    if (savePhotos(p)) { renderPhotoList(); toast("Vuelve la foto genérica"); }
+    const before = loadPhotos(), p = { ...before }; delete p[del.dataset.photoDel];
+    if (savePhotos(p)) { renderPhotoList(); toast("Foto quitada", 6000, { label: "Deshacer", fn: () => { if (savePhotos(before)) { renderPhotoList(); renderProducts(); } } }); }
   }
 });
 $("#photoFile").addEventListener("change", async (e) => {
@@ -1579,8 +1579,10 @@ document.addEventListener("click", (e) => {
   else if (b.dataset.edSave) saveEditor();
   else if (b.dataset.edReset) resetDish();
   else if (b.dataset.prodDel) {
-    saveProducts(userProducts().filter((p) => p.key !== b.dataset.prodDel));
-    afterDishChange(); renderProducts(); toast("Producto borrado");
+    const before = userProducts(), gone = before.find((p) => p.key === b.dataset.prodDel);
+    saveProducts(before.filter((p) => p.key !== b.dataset.prodDel));
+    afterDishChange(); renderProducts();
+    toast("Borrado: " + (gone ? gone.n : "producto"), 6000, { label: "Deshacer", fn: () => { saveProducts(before); afterDishChange(); renderProducts(); toast("Producto recuperado"); } });
   }
   else if (b.dataset.uStep || b.dataset.uSet) stepUnits(b);
   else if (b.dataset.slotPick) {
@@ -2175,7 +2177,7 @@ async function autoFood() {
 document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") autoFood(); });
 window.addEventListener("online", autoFood);
 
-const APP_VERSION = "v24"; // igual que CACHE en sw.js
+const APP_VERSION = "v25"; // igual que CACHE en sw.js
 $("#appVersion").textContent = "Versión de la app: " + APP_VERSION;
 
 /* arranque */

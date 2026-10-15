@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Menú JD</title>
   <meta name="description" content="Menú intercambiable y registro diario de comidas.">
-  <meta name="theme-color" content="#2f7a4f" media="(prefers-color-scheme: light)">
-  <meta name="theme-color" content="#141a16" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#0a1322" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0a1322" media="(prefers-color-scheme: dark)">
   <!-- iOS -->
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
@@ -175,8 +175,8 @@
         <p class="muted">Conecta tu Google Calendar para que el botón de calendario de la pantalla Hoy proponga si ese día trabajas, buscando una palabra clave en el título de los eventos de ese día. Necesita conexión a internet; el resto de la app sigue funcionando sin ella.</p>
         <p class="muted" id="healthHelp">Con el mismo Client ID, los botones "Fitbit" de Hoy y Semana traen tus pasos (y tu peso, si lo registras en Google Health) desde la API de Google Health. En el proyecto de Google Cloud tienen que estar habilitada la "Google Health API" y los permisos <code>googlehealth.activity_and_fitness.readonly</code> y, para el peso, <code>googlehealth.health_metrics_and_measurements.readonly</code>. Para enviar tus comidas (botón de Hoy) hace falta además <code>googlehealth.nutrition.writeonly</code>.</p>
         <div class="sel">
-          <label for="gcalClientId">Client ID de Google<input type="text" id="gcalClientId" placeholder="xxxx.apps.googleusercontent.com"></label>
-          <label for="gcalKeyword">Palabra clave<input type="text" id="gcalKeyword" placeholder="turno"></label>
+          <label for="gcalClientId">Client ID de Google<input type="text" id="gcalClientId" autocomplete="off" spellcheck="false" autocapitalize="off" placeholder="xxxx.apps.googleusercontent.com"></label>
+          <label for="gcalKeyword">Palabra clave<input type="text" id="gcalKeyword" autocomplete="off" placeholder="turno"></label>
         </div>
         <div class="row">
           <button class="btn ghost" id="gcalSave">Guardar ajustes</button>

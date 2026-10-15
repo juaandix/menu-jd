@@ -155,6 +155,12 @@ tarta de queso (1/6)    166  14.9   5.3  8.1   # por porción
 - HTTPS obligatorio (GitHub Pages: https://juaandix.github.io/menu-jd/).
 - Diseño mobile-first, objetivos táctiles ≥ 44 px, sin scroll horizontal.
 
+## Herramientas de diseño y pruebas (solo en este Mac)
+- Skills de terceros revisadas e instaladas en `.claude/skills/` (no se suben: `.claude/` está en `.gitignore`): `ui-ux-pro-max`, `design-taste-frontend` (Taste Skill), `impeccable`, `emil-design-eng`, `review-animations`, `improve-animations`, `animate`, `design-motion-principles`, `web-design-guidelines` (Vercel) y `playwright-cli`.
+- `impeccable` descarga un binario de sus releases de GitHub la primera vez que se usa su CLI (con comprobación sha256): avisar antes de usarla así.
+- `playwright-cli` (npm global `@playwright/cli@0.1.22`) usa el Chrome instalado: `playwright-cli open http://localhost:8080/ --browser=chrome`, `resize 390 844`, `screenshot --filename=…`, `console`, `eval "() => …"`, `close`. Deja una carpeta `.playwright-cli/` (ignorada).
+- El tema oscuro azul/violeta y el sistema visual actual los decidió el usuario: las skills de diseño se usan para revisar y pulir, no para rehacer la estética sin preguntar.
+
 ## Probar
 ```
 python3 -m http.server 8080   # http://localhost:8080
