@@ -922,7 +922,9 @@ function renderEditor() {
     <div class="ed-list">${ed.i.length ? ed.i.map((raw, idx) => {
       const m = ingMacros(raw);
       const miss = loadMissing().includes((parseIng(raw).c || {}).key);
-      return `<div class="ed-row${miss ? " is-miss" : ""}"><div class="ed-name"><b>${esc(raw)}</b><small>${miss ? "no lo tienes · " : ""}${m ? `${r0(m.k)} kcal · ${f1(m.p)} g P` : "sin macros (no se puede cambiar)"}</small></div>
+      const lock = ed.locked && ed.locked.has(idx), qty = m && parseIng(raw).grams != null;
+      const nameIn = `<b>${esc(raw)}</b><small>${miss ? "no lo tienes · " : ""}${m ? `${r0(m.k)} kcal · ${f1(m.p)} g P` : "sin macros (no se puede cambiar)"}${lock ? " · cantidad fijada" : qty ? " · toca para cambiar la cantidad" : ""}</small>`;
+      return `<div class="ed-row${miss ? " is-miss" : ""}${lock ? " is-lock" : ""}">${qty ? `<button type="button" class="ed-name ed-qty" data-ed-qty="${idx}">${nameIn}</button>` : `<div class="ed-name">${nameIn}</div>`}
         ${m ? `<button class="chip-opt" data-ed-change="${idx}">Cambiar</button><button class="del" data-ed-remove="${idx}" aria-label="Quitar ${esc(raw)}">${ico("x")}</button>` : ""}</div>`;
     }).join("") : `<p class="empty">Aún no hay ingredientes.</p>`}</div>
     <button class="btn ghost" data-ed-add="1">${ico("plus")} Añadir ingrediente</button>
@@ -1049,9 +1051,16 @@ function slotTarget(slotId) {
 // Reajusta todos los ingredientes del editor con macros hacia ed.target; los macros cambian por diferencia.
 function rebalanceEditor() {
   if (!ed || !ed.target) return false;
-  const rows = ed.i.map((raw, idx) => ({ raw, idx, p: parseIng(raw) })).filter((x) => x.p.c && x.p.nut && x.p.grams > 0 && x.p.nut[0] > 0);
+  const locked = ed.locked || new Set();
+  const rows = ed.i.map((raw, idx) => ({ raw, idx, p: parseIng(raw) })).filter((x) => !locked.has(x.idx) && x.p.c && x.p.nut && x.p.grams > 0 && x.p.nut[0] > 0);
   if (!rows.length) return false;
-  const items = rows.map((x) => ({ nut: x.p.nut, g0: x.p.grams, ...fitSpec(x.p.c, x.p.grams) }));
+  // En un plato que ya existe, cada ingrediente se mueve entre la mitad y el doble de lo que tiene: así no quedan
+  // cantidades absurdas (1 g de queso) y, si no se llega al objetivo, lo dice el aviso de la franja.
+  const items = rows.map((x) => {
+    const sp = fitSpec(x.p.c, x.p.grams), g0 = x.p.grams;
+    const lo = Math.max(sp.step, Math.ceil((g0 * 0.5) / sp.step) * sp.step), hi = Math.max(lo, Math.min(sp.hi, Math.floor((g0 * 2) / sp.step) * sp.step));
+    return { nut: x.p.nut, g0, step: sp.step, lo: Math.min(lo, g0), hi: Math.max(hi, g0) };
+  });
   const cur = rows.reduce((a, x) => addM(a, ingMacros(x.raw)), ZERO), base = addM(ed.m, cur, -1);
   const g = fitMix(items, ed.target, base);
   const prev = { i: [...ed.i], m: { ...ed.m } };
@@ -1073,6 +1082,8 @@ function startGrams(o) {
   if (o.c.key === "pasta" || o.c.key === "arroz") return o.cooked ? 200 : 80;
   return START_G[roleGroup(o.c.r)] || 100;
 }
+// En "Con lo que tengo" la pasta, el arroz y la carne se cuentan siempre ya cocinados.
+const cookedOnly = (c) => !!(c.cooked && c.cooked.nut) && (["pasta", "arroz", "noodles"].includes(c.key) || c.r === "prot:carne");
 function openPantryPick() {
   sheetState.have = sheetState.have || [];
   sheetState.haveQ = "";
@@ -1081,7 +1092,7 @@ function openPantryPick() {
   $("#sheetBody").innerHTML = `
     <button class="back-link" type="button" data-web-back="1">${ico("back")} Volver</button>
     <p class="add-ctx"><span>${esc(sl.label)}</span><span>objetivo <b>${r0(t.k)}</b> kcal · <b>${r0(t.p)}</b> g P</span></p>
-    <p class="muted small">Marca lo que tienes y quieres usar; se calculan los gramos de cada uno para acercarse al objetivo.</p>
+    <p class="muted small">Marca lo que tienes y quieres usar; se calculan los gramos de cada uno para acercarse al objetivo. La pasta, el arroz y la carne van en peso cocinado.</p>
     <div id="haveSel" class="recent-row"></div>
     <input type="search" id="haveSearch" placeholder="Buscar producto…" autocomplete="off">
     <div id="haveList" class="ed-options have-list"></div>
@@ -1091,7 +1102,7 @@ function openPantryPick() {
 }
 function renderPantryPick() {
   const sel = sheetState.have, q = norm(sheetState.haveQ || ""), miss = new Set(loadMissing());
-  const opts = foodOptions().filter((o) => o.nut[0] > 0 && !miss.has(o.c.key));
+  const opts = foodOptions().filter((o) => o.nut[0] > 0 && !miss.has(o.c.key) && (o.cooked || !cookedOnly(o.c)));
   const byId = new Map(opts.map((o) => [o.id, o]));
   $("#haveSel").innerHTML = sel.map((id) => byId.get(id)).filter(Boolean).map((o) => `<button type="button" class="chip-opt on" data-have="${o.id}" aria-label="Quitar ${esc(o.label)}">${esc(o.label)} ${ico("x")}</button>`).join("");
   const list = opts.filter((o) => !q || norm(o.label).includes(q)).sort((a, b) => sel.includes(b.id) - sel.includes(a.id) || a.label.localeCompare(b.label, "es"));
@@ -1212,6 +1223,13 @@ function renderPickerOptions() {
     ? list.map((o) => `<button class="opt has-thumb" data-ed-pick="${o.id}">${thumbHTML(o.c)}<span>${esc(o.label)}${missSet.has(o.c.key) ? `<small class="miss-mark">no lo tienes</small>` : ""}</span><span class="kc">${r0(o.nut[0])} kcal<br>${f1(o.nut[1])} g P</span></button>`).join("")
     : `<p class="empty">Nada con "${esc(ed.q)}". Créalo abajo con sus macros.</p>`;
 }
+// Cambiar solo la cantidad de un ingrediente que ya está en el plato.
+function openQty(idx) {
+  const p = parseIng(ed.i[idx]);
+  if (!p.c || p.grams == null) return;
+  ed.idx = idx; ed.qtyOnly = true;
+  openGrams(`${p.c.key}|${p.cooked ? 1 : 0}`);
+}
 function openGrams(optId) {
   const o = foodOptions().find((x) => x.id === optId);
   if (!o) return;
@@ -1219,10 +1237,11 @@ function openGrams(optId) {
   const old = ed.idx != null ? parseIng(ed.i[ed.idx]) : null;
   ed.oldM = ed.idx != null ? ingMacros(ed.i[ed.idx]) : null;
   // Al cambiar un ingrediente se calculan solos los gramos que suplen al anterior (si los dos tienen macros).
-  ed.fit = ed.oldM && o.nut[0] > 0 ? defaultFit(ed.oldM) : null;
+  ed.fit = !ed.qtyOnly && ed.oldM && o.nut[0] > 0 ? defaultFit(ed.oldM) : null;
   ed.grams = ed.fit ? fitGrams(ed.fit) : (old && old.grams) || o.c.g || 100;
   $("#sheetBody").innerHTML = `
-    <button class="back-link" type="button" data-ed-back-pick="1">${ico("back")} Elegir otro ingrediente</button>
+    ${ed.qtyOnly ? `<button class="back-link" type="button" data-ed-back="1">${ico("back")} Volver al plato</button>`
+      : `<button class="back-link" type="button" data-ed-back-pick="1">${ico("back")} Elegir otro ingrediente</button>`}
     <div class="portion-card">
       <p><b>${esc(o.label)}</b> <span class="muted small">(${r0(o.nut[0])} kcal · ${f1(o.nut[1])} g P por 100 g)</span></p>
       ${ed.fit ? `<div class="fit-row" role="group" aria-label="Calcular gramos para igualar">${FIT_MODES.map((f) => `<button class="chip-opt fit-btn" data-ed-fit="${f.id}">${f.label}</button>`).join("")}</div>` : ""}
@@ -1230,7 +1249,7 @@ function openGrams(optId) {
       <label for="edGrams">${gramsLabel(o)}<input type="text" inputmode="decimal" id="edGrams" value="${fmtG(ed.grams)}"></label>
       <div id="edPreview"></div>
       <div class="row">
-        <button class="btn" data-ed-apply="1">${ed.idx != null ? "Cambiar" : "Añadir"}</button>
+        <button class="btn" data-ed-apply="1">${ed.qtyOnly ? "Guardar cantidad" : ed.idx != null ? "Cambiar" : "Añadir"}</button>
       </div>
     </div>`;
   $("#edGrams").addEventListener("input", (e) => { ed.grams = parseFloat(e.target.value.replace(",", ".")) || 0; ed.fit = ed.fit && "manual"; renderGramsPreview(); syncUnits(); });
@@ -1266,6 +1285,7 @@ function setFit(mode) {
   $("#edGrams").value = fmtG(g); renderGramsPreview(); syncUnits();
 }
 function pickText() {
+  if (ed.qtyOnly && ed.idx != null) return withGrams(ed.i[ed.idx], ed.grams);
   const o = ed.pick, w = o.cooked ? o.c.cooked.w : o.c.w;
   return `${fmtG(ed.grams)} g de ${w}${unitsText(o, ed.grams)}`;
 }
@@ -1295,6 +1315,9 @@ function applyPick() {
   const txt = pickText();
   if (ed.idx != null) ed.i[ed.idx] = txt; else ed.i.push(txt);
   ed.m = d.total;
+  ed.locked = ed.locked || new Set();
+  if (ed.qtyOnly) ed.locked.add(ed.idx); else if (ed.idx != null) ed.locked.delete(ed.idx);
+  ed.qtyOnly = false;
   afterIngredientChange();
 }
 function saveEditor() {
@@ -1745,9 +1768,13 @@ document.addEventListener("click", (e) => {
   else if (b.dataset.edRemove) {
     const m = ingMacros(ed.i[+b.dataset.edRemove]);
     if (!m) { toast("No tengo los macros de ese ingrediente"); return; }
-    ed.m = addM(ed.m, m, -1); ed.i.splice(+b.dataset.edRemove, 1); afterIngredientChange();
+    const ri = +b.dataset.edRemove;
+    ed.m = addM(ed.m, m, -1); ed.i.splice(ri, 1);
+    if (ed.locked) ed.locked = new Set([...ed.locked].filter((x) => x !== ri).map((x) => (x > ri ? x - 1 : x)));
+    afterIngredientChange();
   }
-  else if (b.dataset.edBack) renderEditor();
+  else if (b.dataset.edBack) { ed.qtyOnly = false; renderEditor(); }
+  else if (b.dataset.edQty) openQty(+b.dataset.edQty);
   else if (b.dataset.edBackPick) openPicker(ed.idx);
   else if (b.dataset.edPick) openGrams(b.dataset.edPick);
   else if (b.dataset.edFit) setFit(b.dataset.edFit);
@@ -2358,7 +2385,7 @@ async function autoFood() {
 document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") autoFood(); });
 window.addEventListener("online", autoFood);
 
-const APP_VERSION = "v30"; // igual que CACHE en sw.js
+const APP_VERSION = "v31"; // igual que CACHE en sw.js
 $("#appVersion").textContent = "Versión de la app: " + APP_VERSION;
 
 /* arranque */

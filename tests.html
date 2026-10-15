@@ -244,6 +244,30 @@ async function run() {
     } finally { E("closeSheet(); ed = null"); }
   }));
 
+  t("Editor: cambiar la cantidad de un ingrediente la fija y el resto compensa", () => withProfile("jd", () => {
+    const prevAuto = w.localStorage.getItem("menujd.autofit.v1"); w.localStorage.removeItem("menujd.autofit.v1");
+    try {
+      E('openEditor("C1")');
+      const idx = E("ed.i.findIndex((r) => /pollo/.test(r))");
+      E(`openQty(${idx})`);
+      eq(E("ed.qtyOnly"), true);
+      E("ed.grams = 140; applyPick()");
+      eq(E(`ed.i[${idx}]`), "140 g pollo cocido", "se conserva la redacción");
+      eq(E(`ed.locked.has(${idx})`), true, "queda fijada");
+      // 140 g de pollo cocido aportan 12 g P más; sin compensar serían ~67 g P. El resto compensa hasta donde puede.
+      const m = E("ed.m"); near(m.k, 750, 15, "kcal"); if (!(m.p < 61)) throw new Error("no compensa la proteína: " + m.p);
+      E("ed.i.findIndex((r) => /aceite/.test(r))") >= 0 && E(`(() => { const ri = ed.i.findIndex((r) => /aceite/.test(r)); ed.m = addM(ed.m, ingMacros(ed.i[ri]), -1); ed.i.splice(ri, 1); ed.locked = new Set([...ed.locked].filter((x) => x !== ri).map((x) => (x > ri ? x - 1 : x))); })()`);
+      eq(E("ed.i[[...ed.locked][0]]"), "140 g pollo cocido", "el fijado sigue apuntando al pollo tras quitar otro");
+    } finally { E("closeSheet(); ed = null"); if (prevAuto != null) w.localStorage.setItem("menujd.autofit.v1", prevAuto); }
+  }));
+  t("Con lo que tengo: pasta, arroz y carne solo en cocinado", () => {
+    E('sheetState = { slot: "C", query: "", have: [] }; openPantryPick();');
+    const ids = [...w.document.querySelectorAll("#haveList [data-have]")].map((b) => b.dataset.have);
+    for (const bad of ["pasta|0", "arroz|0", "pollo|0", "picada|0", "lomo|0", "noodles|0"]) if (ids.includes(bad)) throw new Error("sale en crudo: " + bad);
+    for (const good of ["pasta|1", "arroz|1", "pollo|1", "picada|1", "lomo|1", "burger|1"]) if (!ids.includes(good)) throw new Error("falta cocinado: " + good);
+    E("closeSheet()");
+  });
+
   /* fotos */
   await ta("Cada entrada del catálogo tiene su foto (img/p/clave.webp) y sus créditos", async () => {
     const cr = await (await fetch("img/p/credits.json", { cache: "no-store" })).json();

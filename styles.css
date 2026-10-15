@@ -581,3 +581,7 @@ button,a,label,input,select,summary{touch-action:manipulation}
 .opt.is-sel{border-color:var(--accent);background:var(--accent-soft)}
 .opt.is-sel .kc .i{width:20px;height:20px;color:var(--accent)}
 #haveSel .chip-opt .i{width:14px;height:14px}
+/* editor: tocar el ingrediente cambia su cantidad */
+.ed-qty{background:none;border:0;padding:4px 0;margin:0;text-align:left;color:inherit;font:inherit;cursor:pointer;min-height:44px;align-content:center;border-radius:8px}
+.ed-qty:active{background:var(--surface-2)}
+.ed-row.is-lock .ed-name small{color:var(--accent)}
