@@ -347,14 +347,16 @@ function openSheet(slot) {
 function showSheetList() {
   const slot = sheetState.slot;
   $("#sheetBody").dataset.slot = slot;
+  const sl = profile.slots.find((x) => x.id === slot), done = totals((getDay(iso(current)).items || []).filter((x) => x.slot === slot));
   $("#sheetBody").innerHTML = `
-    <input type="search" id="sheetSearch" placeholder="Buscar un plato…" autocomplete="off" value="${esc(sheetState.query)}">
+    <p class="add-ctx"><span>${esc(dayLabel(current).split(" · ")[0])}</span><span>${esc(sl.hint || "")}</span>${done.k ? `<span>llevas <b>${r0(done.k)}</b> kcal · <b>${r0(done.p)}</b> g P</span>` : ""}</p>
+    <input type="search" id="sheetSearch" placeholder="Buscar un plato o ingrediente…" autocomplete="off" value="${esc(sheetState.query)}">
     <div id="recentRow"></div>
     <div id="sheetList"></div>
     <div id="foodRow"></div>
     <button class="btn ghost free-btn" type="button" data-ed-free="1">${ico("bowl")} Montar con ingredientes</button>
+    <details class="add-more"><summary>Otra cosa con tus macros</summary>
     <form class="custom" id="customForm">
-      <b>Otra cosa (con tus macros)</b>
       <input type="text" id="cName" placeholder="Nombre (p. ej. café americano)" required>
       <div class="grid4">
         <label for="cK">kcal<input type="number" id="cK" inputmode="decimal" min="0" step="any" required></label>
@@ -363,7 +365,7 @@ function showSheetList() {
         <label for="cF">Grasa<input type="number" id="cF" inputmode="decimal" min="0" step="any" value="0"></label>
       </div>
       <button class="btn" type="submit">Añadir</button>
-    </form>`;
+    </form></details>`;
   renderSheetOptions();
   $("#sheetSearch").addEventListener("input", (e) => { sheetState.query = e.target.value; renderSheetOptions(); });
 }
@@ -373,7 +375,10 @@ function renderSheetOptions() {
   // Platos del plan que tocan el día abierto (los que llevan "(S1 · Lunes)" con ese día de la semana).
   const wd = norm(current.toLocaleDateString("es-ES", { weekday: "long" }));
   const planned = q ? [] : profile.menu[slot].filter((o) => { const tg = splitName(o.n).tag; return tg && norm(tg).endsWith(wd); });
-  const optHTML = (o) => `<button class="opt" data-pick="${o.id}"><span class="code">${o.id}</span><span>${nameHTML(o.n)}${dishMissing(o).length ? `<small class="miss-mark">${ico("alert")} falta ${esc(missNames(dishMissing(o)))}</small>` : ""}</span><span class="kc">${o.k} kcal<br>${r0(o.p)} g P</span></button>`;
+  const optHTML = (o) => `<button class="pick" data-pick="${o.id}">
+      <span class="pick-top"><span class="code">${o.id}</span><span class="pick-name">${nameHTML(o.n)}</span><span class="pick-k"><b>${o.k}</b> kcal<br>${r0(o.p)} g P</span></span>
+      <span class="pick-ing">${o.i.map((x) => `<span>${esc(x)}</span>`).join("")}</span>
+      ${dishMissing(o).length ? `<small class="miss-mark">${ico("alert")} falta ${esc(missNames(dishMissing(o)))}</small>` : ""}</button>`;
   $("#recentRow").innerHTML = (planned.length ? `<div class="recent-label">Toca hoy en el plan</div><div class="plan-list">${planned.map(optHTML).join("")}</div>` : "")
     + (recent.length && !q ? `<div class="recent-label">Recientes</div><div class="recent-row">${recent.map((o) => `<button class="chip-opt" data-pick="${o.id}">${esc(splitName(o.n).t)} <small>${o.k}</small></button>`).join("")}</div>` : "");
   const list = profile.menu[slot].filter((o) => dishMatches(o, q) && !planned.includes(o));
@@ -513,7 +518,8 @@ function openPortionStep(dishId) {
   $("#sheetBody").innerHTML = `
     <button class="back-link" id="portionBack" type="button">${ico("back")} Elegir otro plato</button>
     <div class="portion-card">
-      <p class="muted">¿Qué ración quieres registrar?</p>
+      <ul class="pick-list">${o.i.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>
+      <p class="muted small">Cantidades de 1 ración. ¿Cuánto vas a registrar?</p>
       <div class="portion-row">
         ${PORTIONS.map((pt) => `<button class="portion-btn${pt.mult === 1 ? " is-default" : ""}" data-portion="${pt.mult}" data-dish="${o.id}">
           <b>${pt.label}×</b><span>${r0(o.k * pt.mult)} kcal · ${f1(o.p * pt.mult)} g P</span></button>`).join("")}
@@ -2180,7 +2186,7 @@ async function autoFood() {
 document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") autoFood(); });
 window.addEventListener("online", autoFood);
 
-const APP_VERSION = "v27"; // igual que CACHE en sw.js
+const APP_VERSION = "v28"; // igual que CACHE en sw.js
 $("#appVersion").textContent = "Versión de la app: " + APP_VERSION;
 
 /* arranque */

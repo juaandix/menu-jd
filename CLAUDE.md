@@ -209,7 +209,11 @@ Tests: abrir `http://localhost:8080/tests.html` (carga la app en un iframe y pru
 ## Estilo «marcador deportivo» (elegido por el usuario el 15/10/2026)
 - Voz del marcador: `--score` = Barlow Condensed (500/600/700) para cifras grandes, encabezados de sección, cabecera de fecha, pestañas y etiquetas en mayúsculas con espaciado; el texto de lectura y los controles siguen en la fuente del sistema.
 - Firma: barras segmentadas (`.seg`, máscara `repeating-linear-gradient`; el detector de Impeccable la marca como «stripes», es un falso positivo). Semana: fichas como panel de marcador (rejilla con líneas de 1 px, sin tarjetas dentro de tarjetas).
-- Se mantienen el azul de JD y el violeta de Cristina. Revisado a 390 y 320 px sin scroll horizontal (`.date-wrap{grid-template-columns:minmax(0,1fr)}`).
+- JD pasó a negro grafito (15/10/2026); Cristina mantiene el violeta. `--ink-soft` = texto de listas de ingredientes por perfil. Revisado a 390 y 320 px sin scroll horizontal (`.date-wrap{grid-template-columns:minmax(0,1fr)}`).
+
+## Hoja de añadir
+- Cabecera con el día, la pista de la franja y lo que ya llevas en ella (`.add-ctx`). Cada plato (`.pick`) muestra sus ingredientes con cantidades como etiquetas; al elegirlo, el paso de ración lista los ingredientes de 1 ración.
+- "Otra cosa con tus macros" queda plegado al final (`details.add-more`).
 
 ## Menú → Productos
 - Pestañas "Platos | Productos" arriba del Menú (`setMenuTab()`; clases `dishes-only` / `products-only` y `#view-menu.show-products`). Productos = todo el catálogo con macros (`foodOptions()`: SHOP + Mis productos, también las versiones cocidas), agrupado por categoría de la compra (`SHOP_CATS`), con buscador, filtro por categoría y foto.
@@ -226,7 +230,7 @@ Tests: abrir `http://localhost:8080/tests.html` (carga la app en un iframe y pru
 - **Buscar en la hoja de añadir**: además de los platos, salen los ingredientes del catálogo y Mis productos que coinciden (`renderFoodRow`), que se registran por gramos (`logFood`: entrada con `i: ["<g> g de <w>"]`, así cuentan en la compra y el coste). Para lo que no esté, "🔎 Buscar en Google" abre `<texto> macros por 100 g` en otra pestaña y deja en la hoja un formulario (`openWebForm`): macros por 100 g + gramos comidos + tipo; al guardar crea o actualiza el producto en Mis productos y lo registra. No se consulta ninguna API: el usuario copia los números (sin servidor no hay forma gratuita de leer resultados de búsqueda).
 
 ## Interfaz
-- Tema oscuro fijo por perfil (azul JD, violeta Cristina), decidido por el usuario: no seguir el modo claro del sistema.
+- Tema oscuro fijo por perfil, decidido por el usuario: JD en negro grafito neutro (`--bg:#0b0c0e`, superficies `#141518`/`#1b1c20`) con el azul solo como acento; Cristina en violeta. No seguir el modo claro del sistema.
 - Sistema visual en `styles.css`: tokens en `:root` (JD por defecto) y `:root[data-profile="cristina"]` — `--bg/--bg-elev/--surface/-2/-3`, `--line/-2`, `--accent` (texto/trazos) y `--accent-strong` (rellenos y botones), colores de macro `--m-p/--m-c/--m-f`. Fuente del sistema (SF Pro) con `tabular-nums` en todo; `--mono` apunta a la misma fuente. Bordes finos sólidos (nada de discontinuos salvo "lo de siempre").
 - Iconos: SVG en línea con `ico(nombre)` (`ICONS` en `app.js`) y copiados tal cual en `index.html`; no usar emojis en la interfaz (solo "⚠" dentro de `<option>`, que no admite SVG).
 - Hoy: marcador (`scoreboard()`): kcal restantes en grande, % y barra segmentada (`.seg`, se llena animada solo la primera vez por sesión), comido/objetivo/ajuste por pasos; barras de macros (`macroBar()`; solo la proteína tiene objetivo, también segmentada).

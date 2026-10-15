@@ -7,16 +7,16 @@
    (SF Pro en iPhone) con cifras tabulares; colores fijos por macro.
    ========================================================================== */
 :root{
-  /* JD (también valores por defecto) */
-  --bg:#0a1322; --bg-elev:#0e1a2d; --field:#0b1628;
-  --surface:#111e34; --surface-2:#16263f; --surface-3:#1c3050;
-  --line:rgba(160,185,230,.10); --line-2:rgba(160,185,230,.18);
-  --fg:#ecf1fa; --muted:#93a4c3; --faint:#7a8db2;
+  /* JD (también valores por defecto): negro grafito neutro, el azul solo como acento */
+  --bg:#0b0c0e; --bg-elev:#121316; --field:#0f1012;
+  --surface:#141518; --surface-2:#1b1c20; --surface-3:#222429;
+  --line:rgba(255,255,255,.08); --line-2:rgba(255,255,255,.14);
+  --fg:#f2f3f5; --muted:#a3a7ae; --faint:#8a8f97; --ink-soft:#d4d6da;
   --accent:#7ea6ff; --accent-strong:#3f7cf2; --accent-fg:#ffffff; --accent-soft:rgba(126,166,255,.13);
   --warm:#ff8f6b; --warm-soft:rgba(255,143,107,.12); --ok:#4cd6a0;
   --m-p:#7ea6ff; --m-c:#f4bd5a; --m-f:#ef7fb0;
-  --track:rgba(160,185,230,.12);
-  --tabbar-bg:rgba(10,19,34,.84);
+  --track:rgba(255,255,255,.10);
+  --tabbar-bg:rgba(11,12,14,.86);
   --shadow:0 10px 30px rgba(0,0,0,.28);
 
   --font:-apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
@@ -27,12 +27,12 @@
   --tabbar-h:62px;
   color-scheme:dark;
 }
-:root[data-profile="jd"]{ --bg:#0a1322; }
+:root[data-profile="jd"]{ --bg:#0b0c0e; }
 :root[data-profile="cristina"]{
   --bg:#150a20; --bg-elev:#1b0f29; --field:#170c24;
   --surface:#1f1230; --surface-2:#28183e; --surface-3:#321f4c;
   --line:rgba(214,180,245,.10); --line-2:rgba(214,180,245,.18);
-  --fg:#f6eefc; --muted:#bca4d2; --faint:#9c84b1;
+  --fg:#f6eefc; --muted:#bca4d2; --faint:#9c84b1; --ink-soft:#e3d6ef;
   --accent:#c6a0f7; --accent-strong:#9457e0; --accent-fg:#ffffff; --accent-soft:rgba(198,160,247,.14);
   --m-p:#c6a0f7; --m-c:#f4bd5a; --m-f:#6fd3e0;
   --track:rgba(214,180,245,.12);
@@ -188,7 +188,7 @@ input[type=search]{-webkit-appearance:none;appearance:none;padding-left:38px;
 #copyDay{width:100%}
 
 /* ---------- hoja inferior ---------- */
-.sheet-backdrop{position:fixed;inset:0;background:rgba(2,6,14,.6);z-index:30;-webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px);animation:fade .2s ease}
+.sheet-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.62);z-index:30;-webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px);animation:fade .2s ease}
 .sheet{position:fixed;left:0;right:0;bottom:0;z-index:31;max-height:88vh;overflow:auto;background:var(--bg-elev);
   border-radius:24px 24px 0 0;border:1px solid var(--line);border-bottom:0;box-shadow:0 -16px 50px rgba(0,0,0,.45);
   padding:8px 16px calc(env(safe-area-inset-bottom,0px) + 18px);
@@ -257,8 +257,7 @@ input[type=search]{-webkit-appearance:none;appearance:none;padding-left:38px;
 .card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);padding:16px;display:grid;gap:10px;align-content:start;min-width:0}
 .card h3{font-size:1rem;display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
 .code{font-size:.7rem;font-weight:700;color:var(--accent);background:var(--accent-soft);padding:2px 7px;border-radius:6px;flex:none;letter-spacing:.02em}
-.card ul,.card ol{margin:0;padding-left:18px;font-size:.9rem;color:#cfd9ea;display:grid;gap:2px}
-:root[data-profile="cristina"] .card ul,:root[data-profile="cristina"] .card ol{color:#e3d6ef}
+.card ul,.card ol{margin:0;padding-left:18px;font-size:.9rem;color:var(--ink-soft);display:grid;gap:2px}
 .card li::marker{color:var(--faint)}
 .tip{font-size:.82rem;color:var(--muted);margin:0;padding:8px 10px;background:var(--surface-2);border-radius:var(--r-sm)}
 .macros{display:flex;gap:6px 14px;flex-wrap:wrap;align-items:center;font-size:.8rem;color:var(--muted);border-top:1px solid var(--line);padding-top:10px}
@@ -472,8 +471,7 @@ button,a,label,input,select,summary{touch-action:manipulation}
 .dish .kc{font-size:.78rem;color:var(--muted);text-align:right;line-height:1.35}
 .dish .kc b{color:var(--fg);font-weight:650;font-size:.92rem}
 .dish-body{display:grid;gap:10px;padding:0 4px 16px}
-.dish-body ul{margin:0;padding-left:18px;font-size:.9rem;color:#cfd9ea;display:grid;gap:2px}
-:root[data-profile="cristina"] .dish-body ul{color:#e3d6ef}
+.dish-body ul{margin:0;padding-left:18px;font-size:.9rem;color:var(--ink-soft);display:grid;gap:2px}
 .dish-body li::marker{color:var(--faint)}
 .dish-body .macros{border-top:0;padding-top:0}
 
@@ -540,3 +538,32 @@ button,a,label,input,select,summary{touch-action:manipulation}
 .date-wrap{grid-template-columns:minmax(0,1fr)}
 .date-wrap h1{line-height:1.05;font-size:clamp(1.05rem,4.9vw,1.55rem)}
 .type-row select{min-width:0;text-overflow:ellipsis}
+
+/* ---------- Hoja de añadir (estilo marcador) ----------
+   Cada plato enseña sus cantidades; lo de los macros a mano queda plegado al final. */
+#sheetTitle{font-family:var(--score);font-weight:700;text-transform:uppercase;letter-spacing:.05em;font-size:1.45rem}
+.add-ctx{display:flex;flex-wrap:wrap;gap:4px 14px;margin:-4px 0 2px;font-family:var(--score);font-weight:500;text-transform:uppercase;letter-spacing:.06em;font-size:.85rem;color:var(--muted)}
+.add-ctx b{color:var(--fg);font-weight:700;font-size:1rem;letter-spacing:.02em}
+.add-ctx span:first-child{color:var(--accent);font-weight:600}
+#sheetList{display:grid;gap:8px}
+.pick{display:grid;gap:8px;width:100%;text-align:left;background:var(--surface);border:1px solid var(--line);border-radius:var(--r-md);padding:12px 14px 13px;color:var(--fg);font:inherit;cursor:pointer;transition:background-color .15s,border-color .15s}
+.pick:active{background:var(--surface-2)}
+@media (hover:hover){.pick:hover{border-color:var(--line-2)}}
+.pick-top{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center}
+.pick-name{font-weight:600;font-size:.98rem;min-width:0;overflow-wrap:anywhere}
+.pick-k{font-size:.74rem;color:var(--muted);text-align:right;line-height:1.3;white-space:nowrap}
+.pick-k b{font-family:var(--score);font-weight:700;font-size:1.35rem;color:var(--fg);letter-spacing:.01em}
+.pick-ing{display:flex;flex-wrap:wrap;gap:4px 6px;font-size:.8rem;color:var(--ink-soft);line-height:1.35}
+.pick-ing span{background:var(--surface-2);border-radius:6px;padding:2px 7px}
+.pick .miss-mark{margin-top:0}
+.plan-list .pick{border-color:var(--accent);background:var(--accent-soft)}
+.pick-list{margin:0;padding-left:18px;display:grid;gap:3px;font-size:.92rem;color:var(--ink-soft)}
+.pick-list li::marker{color:var(--faint)}
+.portion-btn b{font-family:var(--score);font-size:1.6rem}
+.add-more{border-top:1px solid var(--line);padding-top:6px}
+.add-more > summary{cursor:pointer;min-height:44px;display:flex;align-items:center;gap:8px;color:var(--accent);font-weight:600;font-size:.92rem;list-style:none}
+.add-more > summary::-webkit-details-marker{display:none}
+.add-more > summary::before{content:"+";font-family:var(--score);font-size:1.3rem;line-height:1;width:16px}
+.add-more[open] > summary::before{content:"−"}
+.add-more .custom{margin-top:6px}
+.add-more .custom > b{display:none}
