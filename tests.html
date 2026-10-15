@@ -207,6 +207,43 @@ async function run() {
     near(w.parseIng("1 lata de atún al natural (56 g)").grams, 56, 0.1);
   });
 
+  /* ajuste de cantidades */
+  t("fitMix: pollo + arroz + aceite para una comida de JD (750 kcal, 55 g P) cae en la franja", () => withProfile("jd", () => {
+    const S = (k) => SHOP.find((c) => c.key === k);
+    const items = [[S("pollo").cooked.nut, 120, S("pollo")], [S("arroz").cooked.nut, 200, S("arroz")], [S("aceite").nut, 10, S("aceite")]]
+      .map(([nut, g0, c]) => ({ nut, g0, ...w.fitSpec(c, g0) }));
+    const g = w.fitMix(items, { k: 750, p: 55, c: 80, f: 20 });
+    const k = items.reduce((a, it, i) => a + it.nut[0] * g[i] / 100, 0), p = items.reduce((a, it, i) => a + it.nut[1] * g[i] / 100, 0);
+    near(k, 750, 15, "kcal"); near(p, 55, 3, "proteína");
+    if (g[2] % 1 !== 0 || g[0] % 5 !== 0) throw new Error("cantidades sin redondear: " + g.join(", "));
+  }));
+  t("withGrams conserva el texto y cambia solo la cantidad", () => {
+    eq(w.withGrams("300 g pasta cocida (macarrón o hélices)", 250), "250 g pasta cocida (macarrón o hélices)");
+    eq(w.withGrams("3 huevos L", 120), "2 huevos L");
+    near(w.parseIng(w.withGrams("2 latas atún al natural (112 g)", 168)).grams, 168, 1);
+  });
+  t("Editor: al cambiar el pollo por merluza se recalculan las cantidades y el plato sigue en su franja", () => withProfile("jd", () => {
+    const prevAuto = w.localStorage.getItem("menujd.autofit.v1"); w.localStorage.removeItem("menujd.autofit.v1");
+    try {
+      E('openEditor("C1")');
+      const ed = E("ed"), idx = ed.i.findIndex((r) => /pollo/.test(r));
+      const old = E(`ingMacros(ed.i[${idx}])`); ed.i[idx] = "130 g de merluza";
+      ed.m = E(`addM(addM(ed.m, ${JSON.stringify(old)}, -1), ingMacros("130 g de merluza"))`);
+      E("afterIngredientChange()");
+      const m = E("ed.m");
+      near(m.k, 750, 15, "kcal"); near(m.p, 55, 3, "proteína");
+      eq(E("ed.justFit"), false, "se pinta y se limpia la marca"); // renderEditor la apaga tras pintarla
+    } finally { E("closeSheet(); ed = null"); if (prevAuto != null) w.localStorage.setItem("menujd.autofit.v1", prevAuto); }
+  }));
+  t("Con lo que tengo: pollo cocido, arroz cocido y aceite para la comida → en la franja", () => withProfile("jd", () => {
+    try {
+      E('sheetState = { slot: "C", query: "", have: ["pollo|1", "arroz|1", "aceite|0"] }; computeFromPantry();');
+      const m = E("ed.m");
+      near(m.k, 750, 15, "kcal"); near(m.p, 55, 3, "proteína");
+      eq(E("ed.i.length"), 3);
+    } finally { E("closeSheet(); ed = null"); }
+  }));
+
   /* fotos */
   await ta("Cada entrada del catálogo tiene su foto (img/p/clave.webp) y sus créditos", async () => {
     const cr = await (await fetch("img/p/credits.json", { cache: "no-store" })).json();

@@ -1,5 +1,5 @@
 // Sube la versión cada vez que cambies archivos para que los móviles descarguen la nueva.
-const CACHE = "menujd-v28";
+const CACHE = "menujd-v30";
 // Fotos de productos: caché aparte que no se borra al cambiar de versión (se bajan una vez, al mostrarse).
 const IMG_CACHE = "menujd-img-v1";
 const ASSETS = [

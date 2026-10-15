@@ -354,7 +354,10 @@ function showSheetList() {
     <div id="recentRow"></div>
     <div id="sheetList"></div>
     <div id="foodRow"></div>
-    <button class="btn ghost free-btn" type="button" data-ed-free="1">${ico("bowl")} Montar con ingredientes</button>
+    <div class="row add-tools">
+      <button class="btn free-btn" type="button" data-have-pick="1">${ico("spark")} Con lo que tengo</button>
+      <button class="btn ghost free-btn" type="button" data-ed-free="1">${ico("bowl")} Montar a mano</button>
+    </div>
     <details class="add-more"><summary>Otra cosa con tus macros</summary>
     <form class="custom" id="customForm">
       <input type="text" id="cName" placeholder="Nombre (p. ej. café americano)" required>
@@ -880,14 +883,15 @@ function showEditor(state, title) {
 }
 function openEditor(id) {
   const o = byId(id), slot = slotOf(id);
-  showEditor({ mode: "dish", id, slot, n: o.n, i: [...o.i], m: { k: o.k, p: o.p, c: o.c, f: o.f }, base: profile._baseMenu[slot].find((x) => x.id === id) }, "Cambiar · " + o.n);
+  const base = profile._baseMenu[slot].find((x) => x.id === id);
+  showEditor({ mode: "dish", id, slot, n: o.n, i: [...o.i], m: { k: o.k, p: o.p, c: o.c, f: o.f }, base, target: { k: base.k, p: base.p, c: base.c, f: base.f } }, "Cambiar · " + o.n);
 }
 function openLogEditor(id) {
   const o = byId(id);
-  showEditor({ mode: "log", id, slot: sheetState.slot, n: o.n, i: [...o.i], m: { k: o.k, p: o.p, c: o.c, f: o.f }, base: o }, "Solo para hoy · " + o.n);
+  showEditor({ mode: "log", id, slot: sheetState.slot, n: o.n, i: [...o.i], m: { k: o.k, p: o.p, c: o.c, f: o.f }, base: o, target: { k: o.k, p: o.p, c: o.c, f: o.f } }, "Solo para hoy · " + o.n);
 }
 function openFreeEditor() {
-  showEditor({ mode: "free", slot: sheetState.slot, n: "", i: [], m: { ...ZERO }, base: { n: "", i: [], ...ZERO } }, "Montar con ingredientes");
+  showEditor({ mode: "free", slot: sheetState.slot, n: "", i: [], m: { ...ZERO }, base: { n: "", i: [], ...ZERO }, target: slotTarget(sheetState.slot) }, "Montar con ingredientes");
 }
 function openEntryEditor() {
   const x = getDay(entState.key).items[entState.idx];
@@ -895,7 +899,7 @@ function openEntryEditor() {
   const mult = entryMult(x);
   const per = { k: x.k / mult, p: x.p / mult, c: (x.c || 0) / mult, f: (x.f || 0) / mult };
   const i = x.i || (o ? o.i : []);
-  showEditor({ mode: "entry", slot: x.slot, n: baseName(x.n), i: [...i], m: per, base: { n: baseName(x.n), i: [...i], ...per }, mult }, "Ingredientes · " + baseName(x.n));
+  showEditor({ mode: "entry", slot: x.slot, n: baseName(x.n), i: [...i], m: per, base: { n: baseName(x.n), i: [...i], ...per }, mult, target: { ...per } }, "Ingredientes · " + baseName(x.n));
 }
 function renderEditor() {
   const b = ed.base, free = ed.mode === "free";
@@ -922,6 +926,13 @@ function renderEditor() {
         ${m ? `<button class="chip-opt" data-ed-change="${idx}">Cambiar</button><button class="del" data-ed-remove="${idx}" aria-label="Quitar ${esc(raw)}">${ico("x")}</button>` : ""}</div>`;
     }).join("") : `<p class="empty">Aún no hay ingredientes.</p>`}</div>
     <button class="btn ghost" data-ed-add="1">${ico("plus")} Añadir ingrediente</button>
+    ${ed.target && ed.i.length ? `<div class="fit-box">
+      <p><span>Objetivo <b>${targetTxt(ed.target)}</b>${ed.mode === "free" ? "" : " (el plato original)"}</span>
+        <button type="button" class="chip-opt" data-ed-rebalance="1">${ico("sync")} Ajustar cantidades</button></p>
+      ${ed.justFit ? `<p class="fit-note">${ico("check")} Cantidades recalculadas.${ed.undo ? ` <button type="button" class="link-btn" data-ed-undo="1">Deshacer</button>` : ""}</p>` : ""}
+      ${ed.fromPantry && ed.unused && ed.unused.length ? `<p class="fit-note muted">No hace falta: ${esc(ed.unused.join(", "))}.</p>` : ""}
+      ${ed.mode !== "free" ? `<label class="fit-auto"><input type="checkbox" id="edAuto"${autoFitOn() ? " checked" : ""}> Recalcular las cantidades al cambiar ingredientes</label>` : ""}
+    </div>` : ""}
     <div class="ed-total">
       <div><small>${ed.mode === "log" || ed.mode === "entry" ? "Ahora (1 ración)" : "Ahora"}</small><b>${macrosTxt(ed.m)}</b></div>
       ${showOrig ? `<div><small>Original</small><span>${macrosTxt(b)}</span></div>` : ""}
@@ -930,6 +941,14 @@ function renderEditor() {
     <div class="row">${actions}</div>
     <p class="muted small">${note}</p>`;
   $("#edName").addEventListener("input", (e) => { ed.n = e.target.value; });
+  const auto = $("#edAuto"); if (auto) auto.addEventListener("change", (e) => setAutoFit(e.target.checked));
+  ed.justFit = false;
+}
+// Tras cambiar, añadir o quitar un ingrediente: reajusta el resto si está activado.
+function afterIngredientChange() {
+  ed.undo = null;
+  if (ed.target && (ed.mode === "free" || autoFitOn()) && rebalanceEditor()) ed.justFit = true;
+  renderEditor();
 }
 const portionLabel = (mult) => (PORTIONS.find((p) => p.mult === mult) || { label: String(mult).replace(".", ",") }).label;
 const baseName = (n) => String(n).replace(/ · ración [^·]*$/, "");
@@ -955,6 +974,154 @@ function saveEntryFromEditor() {
   if (changed || x.i) x.i = [...ed.i];
   saveAll(db); renderHoy(); closeSheet(); toast("Entrada actualizada");
 }
+
+/* ---------- Ajuste de cantidades: gramos de varios ingredientes para acercarse a unos macros ----------
+   Mínimos cuadrados con límites (descenso por coordenadas) pesando cada macro por su tolerancia
+   (±15 kcal, ±3 g P; carbohidratos y grasa cuentan menos) y un poco de inercia hacia los gramos de partida,
+   para que no cambie todo de golpe cuando hay varias soluciones. Luego se redondea a cantidades reales
+   (huevos enteros, fruta de media en media, gramos de 5 en 5 o de 1 en 1 en aceites y salsas) y se pule. */
+const FIT_W = { k: 1 / 15 ** 2, p: 1 / 3 ** 2, c: 0.3 / 8 ** 2, f: 0.3 / 4 ** 2 };
+const MK = ["k", "p", "c", "f"];
+const FIT_CAP = { grasa: 25, salsa: 40, dulce: 40, polvo: 60, queso: 80, prot: 400, hc: 450, lacteo: 500, verdura: 400, fruta: 400, bebida: 500, casero: 300 };
+// Paso y límites de un ingrediente según su tipo.
+function fitSpec(c, g0) {
+  const grp = roleGroup(c.r);
+  if (c.u === "ud" && c.g) { const st = c.g * (grp === "fruta" || grp === "casero" ? 0.5 : 1); return { step: st, lo: 0, hi: c.g * 6 }; }
+  const st = ["grasa", "salsa", "dulce", "polvo"].includes(grp) || (g0 || 0) < 40 ? 1 : 5;
+  return { step: st, lo: 0, hi: FIT_CAP[grp] || 500 };
+}
+// items: [{ nut, g0, lo, hi, step, reg? }]; base: macros que no dependen de estos gramos. Devuelve gramos.
+function fitMix(items, target, base = ZERO, reg = 0.15) {
+  const n = items.length, A = items.map((it) => MK.map((_, m) => it.nut[m] / 100));
+  const lam = items.map((it) => (it.reg ?? reg) / Math.max(it.g0 * 0.3, it.step, 5) ** 2);
+  const W = MK.map((m) => (target[m] == null ? 0 : FIT_W[m]));
+  const T = MK.map((m) => target[m] || 0), B = MK.map((m) => base[m] || 0);
+  const g = items.map((it) => Math.min(it.hi, Math.max(it.lo, it.g0)));
+  const res = () => MK.map((_, m) => B[m] + g.reduce((a, gi, i) => a + A[i][m] * gi, 0) - T[m]);
+  const cost = () => res().reduce((a, r, m) => a + W[m] * r * r, 0) + g.reduce((a, gi, i) => a + lam[i] * (gi - items[i].g0) ** 2, 0);
+  for (let it = 0; it < 400; it++) {
+    for (let i = 0; i < n; i++) {
+      const r = res();
+      let num = lam[i] * items[i].g0, den = lam[i];
+      for (let m = 0; m < 4; m++) { num += W[m] * A[i][m] * (A[i][m] * g[i] - r[m]); den += W[m] * A[i][m] ** 2; }
+      g[i] = den > 0 ? Math.min(items[i].hi, Math.max(items[i].lo, num / den)) : g[i];
+    }
+  }
+  // Redondeo a cantidades reales y pulido de ±1 paso mientras mejore.
+  for (let i = 0; i < n; i++) g[i] = Math.min(items[i].hi, Math.max(items[i].lo, Math.round(g[i] / items[i].step) * items[i].step));
+  let best = cost();
+  for (let pass = 0; pass < 60; pass++) {
+    let better = false;
+    for (let i = 0; i < n; i++) for (const d of [-1, 1]) {
+      const old = g[i], v = old + d * items[i].step;
+      if (v < items[i].lo - 1e-9 || v > items[i].hi + 1e-9) continue;
+      g[i] = v; const c = cost();
+      if (c < best - 1e-9) { best = c; better = true; } else g[i] = old;
+    }
+    if (!better) break;
+  }
+  return g.map((x) => Math.round(x * 10) / 10);
+}
+// Escribe una línea de ingrediente con otra cantidad, conservando el texto original si empieza por la cantidad.
+function withGrams(raw, g) {
+  const p = parseIng(raw), c = p.c;
+  if (!c) return raw;
+  const w = p.cooked ? c.cooked.w : c.w;
+  const ud = c.u === "ud" && c.g, ml = c.u === "ml";
+  const lead = raw.match(/^(\d+(?:[.,]\d+)?(?:\s*[-–]\s*\d+(?:[.,]\d+)?)?|\d*[½¼¾])(\s*)(g|ml)?\b/);
+  let out = null;
+  if (lead && !/\([^)]*\d\s*(g|ml)\b/.test(raw)) { // con "(112 g)" entre paréntesis se reescribe entero
+    const unit = lead[3];
+    const val = unit === "g" ? fmtG(g) : unit === "ml" ? fmtG(g / (c.dens || 1)) : ud ? f1(g / c.g) : null;
+    if (val != null) out = val + lead[2] + (unit || "") + raw.slice(lead[0].length);
+  }
+  if (!out) out = ml ? `${fmtG(g / (c.dens || 1))} ml de ${w}` : `${fmtG(g)} g de ${w}${unitsText({ c }, g)}`;
+  const chk = parseIng(out);
+  return chk.c && chk.c.key === c.key && chk.grams != null && Math.abs(chk.grams - g) <= Math.max(1, g * 0.02) ? out : `${fmtG(g)} g de ${w}${unitsText({ c }, g)}`;
+}
+// Objetivo de una franja: el de su intercambio (JD) o la media de sus platos; carbohidratos y grasa, de la media.
+function slotTarget(slotId) {
+  const s = profile.slots.find((x) => x.id === slotId) || {}, list = (profile._baseMenu || profile.menu)[slotId] || [];
+  const avg = (m) => (list.length ? list.reduce((a, o) => a + (o[m] || 0), 0) / list.length : null);
+  const t = s.target;
+  return { k: t ? t.k : avg("k"), p: t ? (t.p != null ? t.p : (t.pMin + t.pMax) / 2) : avg("p"), c: avg("c"), f: avg("f") };
+}
+// Reajusta todos los ingredientes del editor con macros hacia ed.target; los macros cambian por diferencia.
+function rebalanceEditor() {
+  if (!ed || !ed.target) return false;
+  const rows = ed.i.map((raw, idx) => ({ raw, idx, p: parseIng(raw) })).filter((x) => x.p.c && x.p.nut && x.p.grams > 0 && x.p.nut[0] > 0);
+  if (!rows.length) return false;
+  const items = rows.map((x) => ({ nut: x.p.nut, g0: x.p.grams, ...fitSpec(x.p.c, x.p.grams) }));
+  const cur = rows.reduce((a, x) => addM(a, ingMacros(x.raw)), ZERO), base = addM(ed.m, cur, -1);
+  const g = fitMix(items, ed.target, base);
+  const prev = { i: [...ed.i], m: { ...ed.m } };
+  let m = { ...base };
+  rows.forEach((x, k) => { ed.i[x.idx] = withGrams(x.raw, g[k]); const nm = ingMacros(ed.i[x.idx]); if (nm) m = addM(m, nm); });
+  if (ed.i.join("\n") === prev.i.join("\n")) return false;
+  ed.m = m; ed.undo = prev;
+  return true;
+}
+function autoFitOn() { try { return localStorage.getItem("menujd.autofit.v1") !== "0"; } catch { return true; } }
+function setAutoFit(on) { try { localStorage.setItem("menujd.autofit.v1", on ? "1" : "0"); } catch {} }
+const targetTxt = (t) => `${r0(t.k)} kcal · ${f1(t.p)} g P`;
+
+/* ---------- Con lo que tengo: eliges productos y se calculan sus cantidades para la franja ---------- */
+// Ración de partida (solo orienta el reparto cuando hay varias soluciones).
+const START_G = { prot: 150, hc: 150, lacteo: 150, queso: 30, grasa: 10, verdura: 150, fruta: 120, salsa: 15, dulce: 15, bebida: 200, polvo: 30, casero: 76 };
+function startGrams(o) {
+  if (o.c.u === "ud" && o.c.g) return o.c.g;
+  if (o.c.key === "pasta" || o.c.key === "arroz") return o.cooked ? 200 : 80;
+  return START_G[roleGroup(o.c.r)] || 100;
+}
+function openPantryPick() {
+  sheetState.have = sheetState.have || [];
+  sheetState.haveQ = "";
+  $("#sheetTitle").textContent = "Con lo que tengo";
+  const t = slotTarget(sheetState.slot), sl = profile.slots.find((x) => x.id === sheetState.slot);
+  $("#sheetBody").innerHTML = `
+    <button class="back-link" type="button" data-web-back="1">${ico("back")} Volver</button>
+    <p class="add-ctx"><span>${esc(sl.label)}</span><span>objetivo <b>${r0(t.k)}</b> kcal · <b>${r0(t.p)}</b> g P</span></p>
+    <p class="muted small">Marca lo que tienes y quieres usar; se calculan los gramos de cada uno para acercarse al objetivo.</p>
+    <div id="haveSel" class="recent-row"></div>
+    <input type="search" id="haveSearch" placeholder="Buscar producto…" autocomplete="off">
+    <div id="haveList" class="ed-options have-list"></div>
+    <button class="btn" type="button" id="haveGo" data-have-go="1">Calcular cantidades</button>`;
+  renderPantryPick();
+  $("#haveSearch").addEventListener("input", (e) => { sheetState.haveQ = e.target.value; renderPantryPick(); });
+}
+function renderPantryPick() {
+  const sel = sheetState.have, q = norm(sheetState.haveQ || ""), miss = new Set(loadMissing());
+  const opts = foodOptions().filter((o) => o.nut[0] > 0 && !miss.has(o.c.key));
+  const byId = new Map(opts.map((o) => [o.id, o]));
+  $("#haveSel").innerHTML = sel.map((id) => byId.get(id)).filter(Boolean).map((o) => `<button type="button" class="chip-opt on" data-have="${o.id}" aria-label="Quitar ${esc(o.label)}">${esc(o.label)} ${ico("x")}</button>`).join("");
+  const list = opts.filter((o) => !q || norm(o.label).includes(q)).sort((a, b) => sel.includes(b.id) - sel.includes(a.id) || a.label.localeCompare(b.label, "es"));
+  $("#haveList").innerHTML = list.map((o) => `<button type="button" class="opt rec has-thumb${sel.includes(o.id) ? " is-sel" : ""}" data-have="${o.id}" aria-pressed="${sel.includes(o.id)}">${thumbHTML(o.c)}<span>${esc(o.label)}<small>${r0(o.nut[0])} kcal · ${f1(o.nut[1])} g P /100 g</small></span><span class="kc">${sel.includes(o.id) ? ico("check") : ""}</span></button>`).join("")
+    || `<p class="empty">Nada con «${esc(sheetState.haveQ)}».</p>`;
+  const go = $("#haveGo"); go.disabled = !sel.length;
+  go.textContent = sel.length ? `Calcular cantidades (${sel.length})` : "Elige al menos un producto";
+}
+function toggleHave(id) {
+  const sel = sheetState.have, i = sel.indexOf(id);
+  if (i >= 0) sel.splice(i, 1); else sel.push(id);
+  renderPantryPick();
+}
+function computeFromPantry() {
+  const opts = sheetState.have.map((id) => foodOptions().find((o) => o.id === id)).filter(Boolean);
+  if (!opts.length) return;
+  const target = slotTarget(sheetState.slot);
+  const items = opts.map((o) => { const g0 = startGrams(o); return { nut: o.nut, g0, ...fitSpec(o.c, g0) }; });
+  const g = fitMix(items, target, ZERO, 0.05);
+  const lines = [], unused = [];
+  opts.forEach((o, k) => {
+    if (!(g[k] > 0)) { unused.push(o.label); return; }
+    const w = o.cooked ? o.c.cooked.w : o.c.w, u = o.c.u === "ml" ? "ml" : "g";
+    lines.push(u === "ml" ? `${fmtG(g[k] / (o.c.dens || 1))} ml de ${w}` : `${fmtG(g[k])} g de ${w}${unitsText(o, g[k])}`);
+  });
+  const m = lines.reduce((a, raw) => addM(a, ingMacros(raw) || ZERO), ZERO);
+  const slot = sheetState.slot;
+  showEditor({ mode: "free", slot, n: "", i: lines, m, base: { n: "", i: [], ...ZERO }, target, fromPantry: true, unused }, "Con lo que tengo");
+}
+
 // Opciones del buscador: cada entrada del catálogo con macros (y su versión cocinada si la tiene) + Mis productos.
 function foodOptions() {
   const out = [];
@@ -1128,7 +1295,7 @@ function applyPick() {
   const txt = pickText();
   if (ed.idx != null) ed.i[ed.idx] = txt; else ed.i.push(txt);
   ed.m = d.total;
-  renderEditor();
+  afterIngredientChange();
 }
 function saveEditor() {
   if (ed.mode !== "dish") return;
@@ -1578,13 +1745,18 @@ document.addEventListener("click", (e) => {
   else if (b.dataset.edRemove) {
     const m = ingMacros(ed.i[+b.dataset.edRemove]);
     if (!m) { toast("No tengo los macros de ese ingrediente"); return; }
-    ed.m = addM(ed.m, m, -1); ed.i.splice(+b.dataset.edRemove, 1); renderEditor();
+    ed.m = addM(ed.m, m, -1); ed.i.splice(+b.dataset.edRemove, 1); afterIngredientChange();
   }
   else if (b.dataset.edBack) renderEditor();
   else if (b.dataset.edBackPick) openPicker(ed.idx);
   else if (b.dataset.edPick) openGrams(b.dataset.edPick);
   else if (b.dataset.edFit) setFit(b.dataset.edFit);
   else if (b.dataset.edApply) applyPick();
+  else if (b.dataset.edRebalance) { ed.undo = null; if (rebalanceEditor()) { ed.justFit = true; renderEditor(); } else toast("Ya está lo más ajustado posible"); }
+  else if (b.dataset.edUndo) { if (ed.undo) { ed.i = ed.undo.i; ed.m = ed.undo.m; ed.undo = null; renderEditor(); } }
+  else if (b.dataset.have) toggleHave(b.dataset.have);
+  else if (b.dataset.haveGo) computeFromPantry();
+  else if (b.dataset.havePick) openPantryPick();
   else if (b.dataset.edSave) saveEditor();
   else if (b.dataset.edReset) resetDish();
   else if (b.dataset.prodDel) {
@@ -2186,7 +2358,7 @@ async function autoFood() {
 document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") autoFood(); });
 window.addEventListener("online", autoFood);
 
-const APP_VERSION = "v28"; // igual que CACHE en sw.js
+const APP_VERSION = "v30"; // igual que CACHE en sw.js
 $("#appVersion").textContent = "Versión de la app: " + APP_VERSION;
 
 /* arranque */

@@ -1,10 +1,7 @@
-.DS_Store
-Plan nutricional Cristina.pdf
-menu-jd-pwa.zip
-Captura*.png
-Captura de pantalla*.png
-Receipt-*.pdf
+# Documentos personales (tickets, plan de la dietista, capturas): solo en este Mac
+privado/
+# Herramientas locales: skills de Claude, salida de Playwright y de Impeccable
 .claude/
-IMG_*.PNG
 .playwright-cli/
 .impeccable/
+.DS_Store

@@ -56,7 +56,6 @@ button,select,input{font:inherit;color:inherit}
 button{-webkit-user-select:none;user-select:none}
 a{color:var(--accent)}
 .muted{color:var(--muted)} .small{font-size:.84rem}
-.eyebrow{font-size:.7rem;font-weight:650;letter-spacing:.09em;text-transform:uppercase;color:var(--accent);margin:0 0 6px}
 .lead{color:var(--muted);margin:8px 0 0;font-size:.95rem}
 .view{display:grid;gap:16px;grid-template-columns:minmax(0,1fr)}
 .page-head{padding-top:8px}
@@ -146,9 +145,6 @@ input[type=search]{-webkit-appearance:none;appearance:none;padding-left:38px;
 .bar.over i{background:var(--warm)}
 .mini-row{display:flex;flex-wrap:wrap;gap:4px 18px;font-size:.84rem;color:var(--muted);margin:0}
 .mini-row b{color:var(--fg);font-weight:650}
-.chips{display:flex;gap:8px;flex-wrap:wrap}
-.chip{font-size:.78rem;padding:4px 10px;border-radius:99px;background:var(--accent-soft);color:var(--fg)}
-.chip.warn{background:transparent;border:1px solid var(--warm);color:var(--warm)}
 .suggest{display:grid;gap:8px;border-top:1px solid var(--line);padding-top:16px}
 .suggest p{margin:0;font-size:.85rem;color:var(--muted)}
 .suggest p b{color:var(--fg)}
@@ -567,3 +563,21 @@ button,a,label,input,select,summary{touch-action:manipulation}
 .add-more[open] > summary::before{content:"−"}
 .add-more .custom{margin-top:6px}
 .add-more .custom > b{display:none}
+
+/* ---------- Ajuste de cantidades ---------- */
+.add-tools{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.add-tools .btn{margin-top:0}
+.fit-box{display:grid;gap:8px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r-md);padding:12px 14px}
+.fit-box p{margin:0;font-size:.86rem;color:var(--muted)}
+.fit-box > p:first-child{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+.fit-box b{font-family:var(--score);font-weight:700;color:var(--fg);font-size:1.05rem;letter-spacing:.02em}
+.fit-box .chip-opt{min-height:40px}
+.fit-note{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.fit-note .i{width:15px;height:15px;color:var(--ok)}
+.link-btn{border:0;background:none;color:var(--accent);font:inherit;font-weight:600;padding:6px 2px;min-height:36px;cursor:pointer}
+.fit-auto{display:flex;align-items:center;gap:10px;font-size:.86rem;color:var(--fg);min-height:40px;cursor:pointer}
+.fit-auto input{width:20px;height:20px;accent-color:var(--accent-strong);margin:0}
+.have-list{max-height:none}
+.opt.is-sel{border-color:var(--accent);background:var(--accent-soft)}
+.opt.is-sel .kc .i{width:20px;height:20px;color:var(--accent)}
+#haveSel .chip-opt .i{width:14px;height:14px}
