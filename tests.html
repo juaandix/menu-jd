@@ -24,13 +24,17 @@ function t(name, fn) {
   try { const r = fn(); if (r === false) throw new Error("falso"); pass++; lines.push(`<span class="ok">✓</span> ${name}`); }
   catch (e) { fail++; lines.push(`<span class="ko">✗ ${name}</span>\n    ${String(e.message || e).replace(/</g, "&lt;")}`); }
 }
+async function ta(name, fn) {
+  try { const r = await fn(); if (r === false) throw new Error("falso"); pass++; lines.push(`<span class="ok">✓</span> ${name}`); }
+  catch (e) { fail++; lines.push(`<span class="ko">✗ ${name}</span>\n    ${String(e.message || e).replace(/</g, "&lt;")}`); }
+}
 function eq(a, b, msg = "") { if (a !== b) throw new Error(`${msg} esperaba ${JSON.stringify(b)}, salió ${JSON.stringify(a)}`); }
 function near(a, b, tol, msg = "") { if (!(Math.abs(a - b) <= tol)) throw new Error(`${msg} esperaba ${b} ±${tol}, salió ${a}`); }
 
 let swText = "";
 fetch("sw.js", { cache: "no-store" }).then((r) => r.text()).then((x) => (swText = x)).catch(() => {});
-document.getElementById("app").addEventListener("load", () => setTimeout(run, 300));
-function run() {
+document.getElementById("app").addEventListener("load", () => setTimeout(() => run().catch((e) => { document.getElementById("head").textContent = "Error: " + e.message; }), 300));
+async function run() {
   const w = document.getElementById("app").contentWindow;
   const E = (code) => w.eval(code); // ámbito global de la app (llega a const/let como SHOP o profile)
   const SHOP = E("SHOP"), PROFILES = E("PROFILES"), ROLE_LABELS = E("ROLE_LABELS");
@@ -177,6 +181,17 @@ function run() {
     for (const [raw, key] of Object.entries(cases)) eq(w.parseIng(raw).c?.key, key, raw);
     if (w.parseIng("perejil fresco, zumo de limón y sal").c?.key === "zumo") throw new Error("zumo de limón cae en zumo");
   });
+  t("Productos de los tickets de Mercadona: cada uno cae en su entrada", () => {
+    const cases = { "Filetes de caballa del sur en aceite de oliva": "caballa", "Sardinillas en tomate": "sardinillas", "Jamoncitos de pollo": "jamoncitos",
+      "Preparado de carne picada vacuno y cerdo": "picadamixta", "Preparado de carne picada pollo": "picada", "Caldo de pollo en pastillas": "caldo",
+      "Cereales rellenos de leche": "cereales", "Cacao puro en polvo La Chocolatera": "cacao", "Chocolate negro 85% cacao": "chocolate",
+      "Queso fresco cottage semidesnatado": "cottage", "Pasta fresca gnocchi": "gnocchi", "Macarrón Hacendado": "pasta", "Alubia cocida blanca": "alubias",
+      "Postre lácteo con fruta 0% MG": "postrefruta", "Postre lácteo con fresa +Proteínas": "postre", "Gelatina 0% sabor cereza, cola y sandía": "gelatina",
+      "Vinagre de vino blanco": "vinagre", "Cebolla en polvo": "especias", "Ajo granulado": "especias", "100 g de repollo": "col",
+      "Coliflor, brócoli y zanahoria": "brocoli", "Espárragos blancos medianos": "esparragosblancos", "Mix frutas tropical": "frutatropical" };
+    for (const [raw, key] of Object.entries(cases)) eq(w.parseIng(raw).c?.key, key, raw);
+    eq(w.parseIng("salsa de soja baja en sal (10-15 ml, opcional)").c?.key, "soja", "soja con sal");
+  });
   t("330 ml de cerveza ≈ 142 kcal; 1 café con leche ≈ 48 kcal", () => {
     near(w.ingMacros("330 ml de cerveza").k, 141.9, 0.5);
     near(w.ingMacros("1 café con leche").k, 48, 0.5);
@@ -191,6 +206,60 @@ function run() {
     near(w.parseIng("2 huevos L").grams, 120, 0.1);
     near(w.parseIng("1 lata de atún al natural (56 g)").grams, 56, 0.1);
   });
+
+  /* comidas → Google Health (API simulada: no sale nada a internet) */
+  {
+    const prevProfile = E("profile.id"), realFetch = w.fetch, key = "2020-01-01";
+    E("profile = PROFILES.jd; rebuildIndex();");
+    const sentKey = E("foodSentKey()"), savedSent = w.localStorage.getItem(sentKey);
+    const calls = [];
+    let id = 0;
+    w.fetch = async (url, opts = {}) => {
+      const body = opts.body ? JSON.parse(opts.body) : null;
+      calls.push({ url, body });
+      return { ok: true, status: 200, json: async () => (/batchDelete/.test(url) ? { done: true } : { done: true, response: { name: `users/me/dataTypes/nutrition-log/dataPoints/p${++id}` } }) };
+    };
+    try {
+      w.localStorage.removeItem(sentKey);
+      E(`db["${key}"] = { type: "trabajo", items: [
+        { slot: "D", n: "Tostadas", k: 500, p: 40, c: 50, f: 12 },
+        { slot: "S", n: "Muffin", m: 2, k: 222, p: 19, c: 18.8, f: 7.6 },
+        { slot: "S", n: "Postre", k: 54, p: 8.3, c: 5.4, f: 0.2 } ] };`);
+      t("Comidas: un día con comidas y sin enviar está pendiente", () => eq(w.foodState(key), "pending"));
+      await ta("Comidas: un envío crea una entrada por comida con sus macros y franja", async () => {
+        const n = await w.sendFoodDay({ token: "x" }, key);
+        eq(n, 3); eq(calls.length, 3);
+        const log = calls[1].body.nutritionLog;
+        eq(log.mealType, "SNACK"); eq(log.energy.kcal, 222); eq(log.foodDisplayName, "Muffin ×2");
+        eq(log.nutrients[0].nutrient, "PROTEIN"); eq(log.nutrients[0].quantity.grams, 19); eq(log.totalFat.grams, 7.6);
+        if (calls[1].body.nutritionLog.interval.startTime === calls[2].body.nutritionLog.interval.startTime) throw new Error("dos snacks a la misma hora");
+        eq(w.foodState(key), "sent");
+      });
+      t("Comidas: cambiar algo tras enviarlo lo marca para actualizar", () => { E(`db["${key}"].items[0].k = 520`); eq(w.foodState(key), "changed"); });
+      await ta("Comidas: reenviar borra las 3 entradas anteriores y crea las nuevas", async () => {
+        calls.length = 0;
+        await w.sendFoodDay({ token: "x" }, key);
+        eq(calls[0].url.endsWith(":batchDelete"), true, "primero borra");
+        eq(calls[0].body.names.join(","), "users/me/dataTypes/nutrition-log/dataPoints/p1,users/me/dataTypes/nutrition-log/dataPoints/p2,users/me/dataTypes/nutrition-log/dataPoints/p3");
+        eq(calls.length, 4); eq(w.foodState(key), "sent");
+      });
+      await ta("Comidas: si falla a medias, se guarda lo creado para borrarlo en el siguiente intento", async () => {
+        E(`db["${key}"].items[0].k = 530`);
+        let n = 0;
+        w.fetch = async (url) => (/batchDelete/.test(url) || ++n < 2
+          ? { ok: true, status: 200, json: async () => ({ done: true, response: { name: "users/me/dataTypes/nutrition-log/dataPoints/q" + n } }) }
+          : { ok: false, status: 500, json: async () => ({ error: { message: "boom" } }) });
+        try { await w.sendFoodDay({ token: "x" }, key); throw new Error("no falló"); } catch (e) { if (e.message === "no falló") throw e; }
+        eq(w.foodState(key), "changed");
+        eq(E(`loadFoodSent().days["${key}"].names.length`), 1);
+      });
+    } finally {
+      w.fetch = realFetch;
+      E(`delete db["${key}"]`);
+      if (savedSent != null) w.localStorage.setItem(sentKey, savedSent); else w.localStorage.removeItem(sentKey);
+      E(`profile = PROFILES.${prevProfile}; rebuildIndex();`);
+    }
+  }
 
   for (const [k, v] of Object.entries(saved)) if (v != null) w.localStorage.setItem(k, v); else w.localStorage.removeItem(k);
   E("parseCache.clear()");

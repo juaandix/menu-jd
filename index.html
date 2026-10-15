@@ -45,6 +45,10 @@
         </div>
         <p class="muted small" id="stepsInfo"></p>
         <p class="muted small" id="healthStatus" hidden></p>
+        <div class="food-sync" id="foodSync" hidden>
+          <p class="muted small" id="foodStatus"></p>
+          <button class="btn ghost" id="foodSend" type="button"></button>
+        </div>
       </div>
       <div id="slots" class="slots"></div>
       <button class="btn ghost" id="copyDay" type="button"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2.5"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg> Copiar comidas de otro día</button>
@@ -148,7 +152,7 @@
       <section class="block" id="gcalSection">
         <h2>Google: turnos y Fitbit</h2>
         <p class="muted">Conecta tu Google Calendar para que el botón de calendario de la pantalla Hoy proponga si ese día trabajas, buscando una palabra clave en el título de los eventos de ese día. Necesita conexión a internet; el resto de la app sigue funcionando sin ella.</p>
-        <p class="muted" id="healthHelp">Con el mismo Client ID, los botones "Fitbit" de Hoy y Semana traen tus pasos (y tu peso, si lo registras en Google Health) desde la API de Google Health. En el proyecto de Google Cloud tienen que estar habilitada la "Google Health API" y los permisos <code>googlehealth.activity_and_fitness.readonly</code> y, para el peso, <code>googlehealth.health_metrics_and_measurements.readonly</code>.</p>
+        <p class="muted" id="healthHelp">Con el mismo Client ID, los botones "Fitbit" de Hoy y Semana traen tus pasos (y tu peso, si lo registras en Google Health) desde la API de Google Health. En el proyecto de Google Cloud tienen que estar habilitada la "Google Health API" y los permisos <code>googlehealth.activity_and_fitness.readonly</code> y, para el peso, <code>googlehealth.health_metrics_and_measurements.readonly</code>. Para enviar tus comidas (botón de Hoy) hace falta además <code>googlehealth.nutrition.writeonly</code>.</p>
         <div class="sel">
           <label for="gcalClientId">Client ID de Google<input type="text" id="gcalClientId" placeholder="xxxx.apps.googleusercontent.com"></label>
           <label for="gcalKeyword">Palabra clave<input type="text" id="gcalKeyword" placeholder="turno"></label>

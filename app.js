@@ -22,6 +22,7 @@ const ICONS = {
   calendar: '<rect x="3.5" y="5" width="17" height="15.5" rx="3"/><path d="M3.5 10h17M8 3v4M16 3v4"/>',
   external: '<path d="M14 4h6v6M20 4l-9 9"/><path d="M18 14v4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4"/>',
   spark: '<path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M5.6 18.4l2.8-2.8M15.6 8.4l2.8-2.8"/>',
+  upload: '<path d="M12 15V4"/><path d="m7 9 5-5 5 5"/><path d="M5 20h14"/>',
 };
 const ico = (name, cls = "") => `<svg class="i${cls ? " " + cls : ""}" viewBox="0 0 24 24" aria-hidden="true">${ICONS[name]}</svg>`;
 function nameHTML(n) { const x = splitName(n); return esc(x.t) + (x.tag ? ` <span class="tag">${esc(x.tag)}</span>` : ""); }
@@ -127,6 +128,7 @@ function renderHoy() {
   $("#gcalDetect").hidden = !profile.calendar;
   $("#healthDay").hidden = !profile.health;
   renderHealthStatus();
+  renderFoodSync();
 
   const t = totals(day.items);
   const adj = stepAdjust(day, type, key);
@@ -1308,6 +1310,8 @@ function shopText() {
 function renderPrices() {
   const used = new Set();
   ALL.forEach((o) => o.i.forEach((raw) => { const { c } = parseIng(raw); if (c) used.add(c.key); }));
+  // También lo registrado suelto (fruta, productos del catálogo…), para poder ponerle precio.
+  Object.values(db).forEach((d) => (d.items || []).forEach((x) => (x.i || []).forEach((raw) => { const { c } = parseIng(raw); if (c) used.add(c.key); })));
   userProducts().forEach((p) => used.add(p.key));
   const unit = { g: "€/kg", ml: "€/l", ud: "€/ud" };
   const box = $("#priceList");
@@ -1389,7 +1393,7 @@ function switchProfile(id) {
   renderProfileSelect();
   renderMenu(); renderRecetas();
   show("hoy");
-  autoHealth();
+  autoHealth(); autoFood();
 }
 $("#profileSelect").addEventListener("change", (e) => switchProfile(e.target.value));
 
@@ -1636,11 +1640,11 @@ $("#gcalSave").addEventListener("click", () => {
   const clientId = $("#gcalClientId").value.trim();
   const keyword = $("#gcalKeyword").value.trim() || "turno";
   saveGcalCfg({ clientId, keyword });
-  clearGcalToken(); gcalTokenClient = null; clearHealthToken();
+  clearGcalToken(); gcalTokenClient = null; clearHealthToken(); clearFoodToken();
   $("#gcalMsg").textContent = "Ajustes guardados.";
 });
 $("#gcalDisconnect").addEventListener("click", () => {
-  clearGcalToken(); gcalTokenClient = null; clearHealthToken();
+  clearGcalToken(); gcalTokenClient = null; clearHealthToken(); clearFoodToken();
   $("#gcalMsg").textContent = "Desconectado.";
 });
 
@@ -1850,14 +1854,190 @@ $("#healthWeek").addEventListener("click", () => {
   runHealthSync(weekStart, to, () => renderSemana());
 });
 
-const APP_VERSION = "v20"; // igual que CACHE en sw.js
+/* ---------- Comidas → Google Health (solo perfiles con health.food) ----------
+   Un único envío por día: cada comida registrada es una entrada "nutrition-log" (alimento anónimo con kcal, P, C, G).
+   Sin servidor no se puede disparar a una hora fija (iOS no deja ejecutar nada en segundo plano a una PWA): el día se envía
+   al pulsar el botón por la noche o, si no, al abrir la app al día siguiente (en silencio si el token de la sesión sigue vivo;
+   si no, el botón se resalta y basta un toque). Las entradas anónimas no se pueden editar: si el día cambia después
+   de enviarlo, se borran (batchDelete) y se crean de nuevo. */
+const FOOD_SCOPE = "https://www.googleapis.com/auth/googlehealth.nutrition.writeonly";
+const MEAL_TYPE = { D: "BREAKFAST", C: "LUNCH", S: "SNACK", N: "DINNER" };
+const MEAL_TIME = { D: [8, 0], C: [14, 30], S: [17, 30], N: [21, 0] }; // hora nominal de cada franja (no se registra la real)
+const FOOD_PENDING_DAYS = 7; // días cerrados que se revisan para avisar de lo que falta por enviar
+const foodOn = () => !!(profile.health && profile.health.food);
+function foodTokKey() { return `menujd.ghealth.food.tok.${profile.id}.v1`; }
+function foodSentKey() { return `menujd.ghealth.food.${profile.id}.v1`; }
+// { since: "YYYY-MM-DD" (primer envío: lo anterior no se reclama), days: { "YYYY-MM-DD": { sig, names: [nombre del dataPoint], at } } }
+function loadFoodSent() { try { return JSON.parse(localStorage.getItem(foodSentKey())) || { days: {} }; } catch { return { days: {} }; } }
+function saveFoodSent(st) { try { localStorage.setItem(foodSentKey(), JSON.stringify(st)); } catch {} }
+const foodSig = (items) => JSON.stringify((items || []).map((x) => [x.slot, x.n, r1(x.k), r1(x.p), r1(x.c), r1(x.f)]));
+// "empty" (nada que enviar), "pending" (sin enviar), "changed" (cambiado tras enviarlo), "sent", "future".
+function foodState(key, st = loadFoodSent()) {
+  if (key > iso(new Date())) return "future";
+  const items = (db[key] && db[key].items) || [], prev = st.days[key];
+  if (!prev) return items.length ? "pending" : "empty";
+  return prev.sig === foodSig(items) ? "sent" : "changed";
+}
+// Días ya terminados (antes de hoy) con algo por enviar o actualizar, desde el primer envío.
+function foodPendingDays(st = loadFoodSent()) {
+  if (!st.since) return [];
+  const out = [];
+  for (let i = FOOD_PENDING_DAYS; i >= 1; i--) {
+    const d = new Date(); d.setDate(d.getDate() - i);
+    const key = iso(d);
+    if (key >= st.since && ["pending", "changed"].includes(foodState(key, st))) out.push(key);
+  }
+  return out;
+}
+function foodToken() { try { return JSON.parse(sessionStorage.getItem(foodTokKey())); } catch { return null; } }
+function clearFoodToken() { try { sessionStorage.removeItem(foodTokKey()); } catch {} }
+async function ensureFoodToken() {
+  const tok = foodToken();
+  if (tok && tok.exp > Date.now() + 30000) return tok;
+  const cfg = gcalCfg();
+  if (!cfg.clientId) throw new Error("Configura primero el Client ID en Recetas → Google.");
+  await loadGIS();
+  return new Promise((resolve, reject) => {
+    const client = google.accounts.oauth2.initTokenClient({
+      client_id: cfg.clientId,
+      scope: FOOD_SCOPE,
+      include_granted_scopes: false, // igual que pasos/peso: sin mezclar permisos ajenos en el token
+      callback: (resp) => {
+        if (resp.error) return reject(new Error(resp.error === "access_denied" ? "Google denegó el acceso (¿tu cuenta está en usuarios de prueba?)" : resp.error));
+        if (!google.accounts.oauth2.hasGrantedAllScopes(resp, FOOD_SCOPE)) return reject(new Error("Sin permiso para añadir comidas: márcalo al conectar."));
+        const t = { token: resp.access_token, exp: Date.now() + resp.expires_in * 1000 };
+        try { sessionStorage.setItem(foodTokKey(), JSON.stringify(t)); } catch {}
+        resolve(t);
+      },
+      error_callback: (err) => reject(new Error((err && err.type) || "No se pudo conectar con Google")),
+    });
+    client.requestAccessToken({ prompt: "" });
+  });
+}
+const foodDisplayName = (x) => (splitName(x.n).t + (x.m && Math.abs(x.m - 1) > 0.01 ? ` ×${f1(x.m)}` : "")).slice(0, 100);
+// Envía (o reenvía) un día: borra lo enviado antes y crea una entrada por comida. Guarda el avance aunque falle a medias,
+// para que el siguiente intento borre lo que sí se llegó a crear y no queden duplicados.
+async function sendFoodDay(tok, key) {
+  const st = loadFoodSent();
+  const prev = st.days[key];
+  const old = ((prev && prev.names) || []).filter(Boolean);
+  if (old.length) {
+    try { await healthFetch(tok, "nutrition-log/dataPoints:batchDelete", { names: old }); }
+    catch (err) { if (!/\b404\b|NOT_FOUND/.test(err.message)) throw err; } // ya borradas desde la app de Fitbit
+  }
+  const items = (db[key] && db[key].items) || [];
+  const names = [], perSlot = {};
+  const save = (sig) => {
+    const s2 = loadFoodSent();
+    if (items.length) { s2.days[key] = { sig, names, at: Date.now() }; if (!s2.since || key < s2.since) s2.since = key; }
+    else delete s2.days[key];
+    saveFoodSent(s2);
+  };
+  try {
+    for (const x of items) {
+      const n = (perSlot[x.slot] = (perSlot[x.slot] || 0) + 1);
+      const [h, m] = MEAL_TIME[x.slot] || [12, 0];
+      const start = new Date(key + "T00:00:00"); start.setHours(h, m + (n - 1) * 5, 0, 0);
+      const end = new Date(start.getTime() + 5 * 60e3);
+      const op = await healthFetch(tok, "nutrition-log/dataPoints", { nutritionLog: {
+        interval: { startTime: start.toISOString(), endTime: end.toISOString() },
+        foodDisplayName: foodDisplayName(x),
+        mealType: MEAL_TYPE[x.slot] || "ANYTIME",
+        energy: { kcal: r1(x.k) },
+        totalCarbohydrate: { grams: r1(x.c) },
+        totalFat: { grams: r1(x.f) },
+        nutrients: [{ nutrient: "PROTEIN", quantity: { grams: r1(x.p) } }],
+      } });
+      names.push((op && op.response && op.response.name) || null);
+    }
+  } catch (err) { save("partial"); throw err; }
+  save(foodSig(items));
+  return items.length;
+}
+// Envía los días indicados (en orden) con un solo token: como mucho una ventana de Google.
+async function sendFoodDays(keys, tok) {
+  tok = tok || await ensureFoodToken();
+  let meals = 0;
+  try { for (const key of keys) meals += await sendFoodDay(tok, key); }
+  catch (err) { if (/caducó|Falta un permiso/.test(err.message)) clearFoodToken(); throw err; }
+  return meals;
+}
+const foodDayName = (key) => {
+  const y = new Date(); y.setDate(y.getDate() - 1);
+  return key === iso(y) ? "ayer" : new Date(key + "T12:00:00").toLocaleDateString("es-ES", { weekday: "short", day: "numeric" });
+};
+// Qué se envía al pulsar: primero los días ya terminados que falten (incluido el abierto si es pasado); el de hoy
+// solo cuando no queda nada atrás, para que cada día se envíe una vez al acabar y no a medias.
+function foodSendKeys() {
+  const key = iso(current), st = loadFoodSent(), today = iso(new Date());
+  const open = ["pending", "changed"].includes(foodState(key, st));
+  const closed = foodPendingDays(st).filter((k) => k !== key);
+  if (open && key < today) closed.push(key);
+  if (closed.length) return closed.sort();
+  return open && key === today ? [key] : [];
+}
+function renderFoodSync() {
+  const box = $("#foodSync");
+  if (!foodOn()) { box.hidden = true; return; }
+  const key = iso(current), st = loadFoodSent(), state = foodState(key, st);
+  const others = foodPendingDays(st).filter((k) => k !== key);
+  const isToday = key === iso(new Date());
+  const prev = st.days[key];
+  const at = prev && prev.at ? new Date(prev.at) : null;
+  const atTxt = at ? (iso(at) === key ? "a las " + at.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" }) : "el " + at.toLocaleDateString("es-ES", { day: "numeric", month: "short" })) : "";
+  let msg = "";
+  if (state === "sent") msg = `Google Health: comidas enviadas ${atTxt}.`;
+  else if (state === "changed") msg = prev.sig === "partial" ? "Google Health: el último envío se cortó a medias." : "Google Health: has cambiado comidas después de enviarlas.";
+  else if (state === "pending") msg = isToday ? "Google Health: envía las comidas cuando termines el día." : "Google Health: comidas de este día sin enviar.";
+  if (others.length) msg += `${msg ? " " : "Google Health: "}Falta${others.length > 1 ? "n" : ""} ${others.map(foodDayName).join(", ")}.`;
+  const keys = foodSendKeys();
+  box.hidden = !msg;
+  $("#foodStatus").textContent = msg;
+  const btn = $("#foodSend");
+  btn.hidden = !keys.length;
+  // Resaltado: hay días ya terminados por enviar (el de hoy aún puede cambiar, no se insiste).
+  btn.classList.toggle("stale", keys.some((k) => k < iso(new Date())));
+  const label = keys.length > 1 ? `Enviar ${keys.length} días` : keys[0] !== key ? `Enviar ${foodDayName(keys[0])}` : state === "changed" ? "Actualizar" : "Enviar";
+  btn.innerHTML = `${ico("upload")} ${label}`;
+}
+$("#foodSend").addEventListener("click", async () => {
+  if (!foodOn()) return;
+  const keys = foodSendKeys();
+  if (!keys.length) return;
+  const btn = $("#foodSend");
+  btn.disabled = true;
+  try {
+    toast("Enviando comidas a Google Health…", 10000);
+    const n = await sendFoodDays(keys);
+    toast(`Google Health: ${n} ${n === 1 ? "comida enviada" : "comidas enviadas"}${keys.length > 1 ? ` (${keys.length} días)` : ""}`);
+  } catch (err) {
+    toast(err.message || "No se pudieron enviar las comidas", 15000);
+  } finally { btn.disabled = false; renderFoodSync(); }
+});
+// Al abrir la app o volver a ella: si quedan días terminados por enviar y el token sigue vivo, se envían solos.
+let foodAutoBusy = false;
+async function autoFood() {
+  if (!foodOn() || foodAutoBusy) return;
+  const tok = foodToken(), keys = foodPendingDays();
+  if (!keys.length || !navigator.onLine || !tok || tok.exp < Date.now() + 60000) { renderFoodSync(); return; }
+  foodAutoBusy = true;
+  try {
+    const n = await sendFoodDays(keys, tok);
+    toast(`Google Health: enviadas ${n} ${n === 1 ? "comida" : "comidas"} de ${keys.map(foodDayName).join(", ")}`);
+  } catch { /* en silencio: el botón queda resaltado */ }
+  finally { foodAutoBusy = false; renderFoodSync(); }
+}
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") autoFood(); });
+window.addEventListener("online", autoFood);
+
+const APP_VERSION = "v22"; // igual que CACHE en sw.js
 $("#appVersion").textContent = "Versión de la app: " + APP_VERSION;
 
 /* arranque */
 renderProfileSelect();
 initGcalSettings();
 renderMenu(); renderRecetas(); renderHoy();
-autoHealth();
+autoHealth(); autoFood();
 if ("serviceWorker" in navigator) window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
 $("#toast").addEventListener("click", (e) => {
   if (e.target.closest(".toast-act") && toastAction) { const fn = toastAction.fn; toastAction = null; fn(); return; }
