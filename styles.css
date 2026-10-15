@@ -108,7 +108,7 @@ code{overflow-wrap:anywhere;word-break:break-word;font-size:.85em;background:var
 
 /* ---------- campos ---------- */
 label{font-size:.78rem;color:var(--muted);display:grid;gap:5px;font-weight:550}
-input[type=text],input[type=number],input[type=search],input[type=date],select{width:100%;min-width:0;max-width:100%;padding:11px 12px;border-radius:12px;
+input[type=text],input[type=number],input[type=search],input[type=date],input[type=time],select{width:100%;min-width:0;max-width:100%;padding:11px 12px;border-radius:12px;
   border:1px solid var(--line-2);background:var(--field);color:var(--fg);font-size:1rem;transition:border-color .15s, box-shadow .15s}
 input::placeholder{color:var(--faint)}
 input:focus,select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
@@ -430,9 +430,14 @@ input[type=search]{-webkit-appearance:none;appearance:none;padding-left:38px;
 .photos li span{display:grid;padding:8px 0;gap:1px;min-width:0}
 
 /* Menú: pestañas Platos | Productos */
-.seg{display:grid;grid-template-columns:1fr 1fr;gap:4px;padding:4px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);margin-bottom:14px}
-.seg button{min-height:40px;border:0;border-radius:calc(var(--r-lg) - 4px);background:none;color:var(--muted);font:inherit;font-weight:620;font-size:.92rem;cursor:pointer}
-.seg button[aria-selected="true"]{background:var(--accent-strong);color:var(--accent-fg)}
+/* Platos | Productos: control segmentado (no confundir con .seg, la barra del marcador) */
+.mtabs{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;display:grid;grid-template-columns:1fr 1fr;gap:4px;padding:4px;margin:4px 0 14px;background:var(--bg-elev);border:1px solid var(--line-2);border-radius:16px;box-shadow:0 8px 16px -10px var(--bg)}
+.mtabs button{display:grid;gap:1px;justify-items:center;min-height:56px;padding:8px 6px;border:0;border-radius:12px;background:none;color:var(--muted);font:inherit;cursor:pointer;transition:background-color .2s,color .2s}
+.mtabs button b{font-family:var(--score);font-weight:700;text-transform:uppercase;letter-spacing:.08em;font-size:1.08rem;line-height:1.1}
+.mtabs button small{font-size:.72rem;font-weight:450;color:var(--faint)}
+.mtabs button[aria-selected="true"]{background:var(--accent-strong);color:var(--accent-fg)}
+.mtabs button[aria-selected="true"] small{color:inherit;opacity:.85}
+.mtabs button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .products-only{display:none}
 #view-menu.show-products .products-only{display:block}
 #view-menu.show-products .dishes-only{display:none!important}
@@ -453,9 +458,15 @@ button,a,label,input,select,summary{touch-action:manipulation}
 /* ---------- Rediseño P1 (Impeccable: layout + distill) ----------
    Hoy: el resumen es la única tarjeta; pasos y sincronización son una franja de estado; las comidas, una lista.
    Menú: cada plato es una fila que se despliega (detalles y acciones al abrirla). */
-.slots{gap:0;margin-top:6px}
-.slot.is-empty{padding-block:14px 12px}
-.slot .entry:first-of-type{border-top:0}
+/* cada franja es un bloque propio: cabecera con raya de acento y sus comidas dentro */
+.slots{gap:12px;margin-top:10px}
+.slot{border:1px solid var(--line);border-left:3px solid var(--accent-strong);border-radius:14px;background:var(--surface);padding:12px 12px 4px 14px;gap:0}
+.slot.is-empty{padding-block:12px;border-left-color:var(--line-2);background:none}
+.slot-head{padding-bottom:10px}
+.slot.is-empty .slot-head{padding-bottom:0}
+.slot-body{border-top:1px solid var(--line-2)}
+.slot .entry:first-child{border-top:0}
+.slot .chip-opt.fav{margin-top:10px}
 .dish-list{display:grid;border-top:1px solid var(--line-2)}
 .dish{border-bottom:1px solid var(--line)}
 .dish > summary{list-style:none;display:grid;grid-template-columns:auto 1fr auto 16px;gap:12px;align-items:center;min-height:56px;padding:8px 4px;cursor:pointer}
@@ -585,3 +596,6 @@ button,a,label,input,select,summary{touch-action:manipulation}
 .ed-qty{background:none;border:0;padding:4px 0;margin:0;text-align:left;color:inherit;font:inherit;cursor:pointer;min-height:44px;align-content:center;border-radius:8px}
 .ed-qty:active{background:var(--surface-2)}
 .ed-row.is-lock .ed-name small{color:var(--accent)}
+/* hora de una comida registrada (hoja de la entrada) */
+.ent-time{display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:.85rem;font-weight:450;color:var(--muted);margin:2px 0 4px}
+.ent-time input{width:auto;min-width:120px;min-height:44px;color:var(--fg);font-weight:600}

@@ -120,7 +120,7 @@ tarta de queso (1/6)    166  14.9   5.3  8.1   # por porción
   - `fonts/`: Barlow Condensed 500/600/700 (woff2, latin) + `OFL-BarlowCondensed.txt`. `img/p/`: fotos del catálogo + `credits.json`.
   - `privado/` (no se sube, `.gitignore`): `tickets-mercadona/`, `referencias/` (plan de la dietista, zip original de la app) y `capturas/`. Los documentos personales nuevos van ahí, nunca en la raíz (la raíz es lo que publica GitHub Pages).
 - Persistencia, con clave por perfil: `localStorage["menujd.log.<profileId>.v1"]` =
-  `{ "YYYY-MM-DD": { type: "trabajo-gym", steps?: 12000, items: [{ slot:"D|C|N|S", ref?:"D4", m?: 1.5, i?: [ingredientes por ración], n, k, p, c, f }] } }`.
+  `{ "YYYY-MM-DD": { type: "trabajo-gym", steps?: 12000, items: [{ slot:"D|C|N|S", ref?:"D4", m?: 1.5, i?: [ingredientes por ración], t?: "14:32", n, k, p, c, f }] } }`. `t` = hora real: `addItem()` la pone solo si se registra en el propio día (en días pasados o futuros no se inventa; al copiar de otro día se quita); se cambia o borra en la hoja de la entrada (campo Hora). En Hoy sale delante de los macros; el código del plato (D1, C2…) ya no se muestra en la lista para no confundir la "C" de comida con la de carbohidratos. "editado" solo en platos (`ref`) con ingredientes cambiados, no en productos sueltos.
   Perfil activo en `localStorage["menujd.profile.v1"]`. El registro antiguo de antes de los perfiles (`menujd.log.v1`) se migra automáticamente a `menujd.log.jd.v1` la primera vez que carga `app.js`.
 
 ## Integración opcional con Google Calendar
@@ -144,7 +144,7 @@ tarta de queso (1/6)    166  14.9   5.3  8.1   # por porción
 - Confirmado funcionando con la cuenta real de JD desde el iPhone (12/10/2026).
 
 ### Enviar comidas a Google Health (solo JD: `health.food: true`)
-- **Un envío por día**: cada comida registrada se manda como una entrada `nutrition-log` de alimento anónimo (`POST …/nutrition-log/dataPoints` con `foodDisplayName`, `mealType`, `energy.kcal`, `totalCarbohydrate`, `totalFat` y `nutrients:[{nutrient:"PROTEIN"}]`). Franjas → `BREAKFAST/LUNCH/SNACK/DINNER`, con hora nominal (8:00, 14:30, 17:30, 21:00; varias en la misma franja, +5 min cada una), porque la app no guarda la hora real.
+- **Un envío por día**: cada comida registrada se manda como una entrada `nutrition-log` de alimento anónimo (`POST …/nutrition-log/dataPoints` con `foodDisplayName`, `mealType`, `energy.kcal`, `totalCarbohydrate`, `totalFat` y `nutrients:[{nutrient:"PROTEIN"}]`). Franjas → `BREAKFAST/LUNCH/SNACK/DINNER`, a la hora real (`x.t`) si la tiene; si no, hora nominal (8:00, 14:30, 17:30, 21:00; varias en la misma franja, +5 min cada una). `t` entra en la firma solo si existe (los días ya enviados no cambian).
 - Permiso `googlehealth.nutrition.writeonly`, con token propio (`sessionStorage["menujd.ghealth.food.tok.<id>.v1"]`), separado del de pasos y peso.
 - **Por qué no hay "envío automático a las 23:59"**: sin servidor no se puede ejecutar nada a una hora fija (iOS no deja segundo plano a una PWA) y Google solo da un token nuevo tras una pulsación. Así que: botón en Hoy (bajo los pasos) para enviar el día por la noche; al abrir la app después (`autoFood()`: arranque, `visibilitychange`, `online`) los días ya terminados que falten se envían solos si el token sigue vivo; si no, el botón se resalta ("Enviar ayer" / "Enviar N días").
 - El botón envía primero los días terminados pendientes; el de hoy solo cuando no queda nada atrás.
@@ -203,7 +203,7 @@ Tests: abrir `http://localhost:8080/tests.html` (carga la app en un iframe y pru
 
 ## Rediseño P1 (crítica de Impeccable, 15/10/2026: 26/40)
 - Tono "igual pero ordenado": se conserva el tema y la fuente; cambia la jerarquía.
-- Hoy: el resumen (anillo) es la única tarjeta; pasos, Fitbit y Google Health son una franja de estado sin tarjeta; las comidas son una lista separada por líneas (`.slot` sin fondo ni borde propio).
+- Hoy: el resumen (marcador) es la tarjeta principal; pasos, Fitbit y Google Health son una franja de estado sin tarjeta. Cada franja (Desayuno, Comida…) es un bloque propio (`section.slot`: fondo `--surface`, raya de acento a la izquierda) con sus comidas dentro de `.slot-body`; la franja vacía va sin fondo y con la raya gris (pedido del usuario: antes no se distinguía qué comida era de cada franja).
 - Menú: cada plato es un `<details class="dish">` (código, nombre, kcal/P); ingredientes, nota, macros y botones al desplegarlo. `cardHTML()` sigue llamándose así.
 - Ajustes: pestaña nueva con Mis productos, Fotos de productos, Copia de seguridad (y versión) y Google. Recetas queda solo con recetas y notas.
 - Sin rótulos pequeños sobre los títulos (el texto va en `.lead`). `--faint` subido a `#7a8db2` (JD) y `#9c84b1` (Cristina): ≥4,5:1 sobre fondo y tarjetas.
@@ -226,13 +226,13 @@ Tests: abrir `http://localhost:8080/tests.html` (carga la app en un iframe y pru
 - "Otra cosa con tus macros" queda plegado al final (`details.add-more`).
 
 ## Menú → Productos
-- Pestañas "Platos | Productos" arriba del Menú (`setMenuTab()`; clases `dishes-only` / `products-only` y `#view-menu.show-products`). Productos = todo el catálogo con macros (`foodOptions()`: SHOP + Mis productos, también las versiones cocidas), agrupado por categoría de la compra (`SHOP_CATS`), con buscador, filtro por categoría y foto.
+- Pestañas "Platos | Productos" justo bajo el título del Menú: control segmentado `.mtabs` (fijo arriba al hacer scroll, cada pestaña con su subtítulo y recuento: "24 recetas completas" / "153 alimentos sueltos"). Ojo: no usar la clase `.seg` para controles, es la barra segmentada del marcador (`setMenuTab()`; clases `dishes-only` / `products-only` y `#view-menu.show-products`). Productos = todo el catálogo con macros (`foodOptions()`: SHOP + Mis productos, también las versiones cocidas), agrupado por categoría de la compra (`SHOP_CATS`), con buscador, filtro por categoría y foto.
 - Al tocar uno (`openProductSheet`) se abre la hoja de gramos/unidades (`openFoodGrams` con `sheetState.from = "menu"`) con selector de franja (`data-slot-pick`); se propone por la hora si el día abierto es hoy (`guessSlot()`), si no la primera. Se registra con `logFood` en el **día abierto en Hoy** (como "Monta tu día"), así que sirve para planificar días futuros.
 
 ## Despensa y atajos
 - **Me falta** (Menú, arriba): `localStorage["menujd.missing.v1"] = [claves de SHOP]`, común a los perfiles. Los platos que lo llevan salen con ⚠ y "Sustituir" (Menú: guarda el plato; hoja de añadir: "Sustituir solo para hoy"), con ⚠ en Monta tu día, y no se proponen en "lo de siempre", sugerencias ni Menú variado. Marcarlo como comprado en la lista de la compra lo quita.
 - **Copiar comidas de otro día** (Hoy): lista los 14 días anteriores con comidas; añade sin borrar, con Deshacer.
-- **Lo de siempre** (Hoy, franja vacía): el plato+ración más repetido en esa franja en los 30 días anteriores, si sale ≥3 veces (`favorite()`).
+- **Lo de siempre** (Hoy, franja vacía): el plato+ración más repetido en esa franja en los 30 días anteriores, si sale ≥3 veces (`favorite()`); si no, **Repetir**: el último plato de esa franja en esos 30 días (`last: true`). Nunca uno con algo de "Me falta".
 - **Sugerencia de proteína** (resumen de Hoy): con ≥2 comidas, ≥10 g de proteína pendientes y ≥60 kcal libres, hoy desde las 15 h o días futuros: los 2 platos que más proteína cubren sin pasarse de kcal (`proteinSuggest()`).
 
 - **Bebidas**: grupo `r: "bebida"` y categoría "Bebidas" en la compra. En `SHOP`: café con leche y café (por taza, `u:"ud"`, 200 g), refresco zero, cerveza sin alcohol, cerveza, vino y zumo de naranja (por ml). Van antes que "leche" en `SHOP` (si no, "café con leche" caería en la leche); el zumo excluye "zumo de limón". Los de `u:"ml"` se registran en ml (`"330 ml de cerveza"`).

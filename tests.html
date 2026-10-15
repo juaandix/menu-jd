@@ -367,6 +367,39 @@ async function run() {
     }
   }
 
+  /* hora real de las comidas y "Repetir" lo último de la franja */
+  {
+    const prevProfile = E("profile.id"), realFetch = w.fetch, prevCur = E("iso(current)"), sentKey = E("foodSentKey()");
+    const savedSent = w.localStorage.getItem(sentKey), calls = [];
+    E("profile = PROFILES.jd; rebuildIndex();");
+    w.fetch = async (url, opts = {}) => { calls.push(JSON.parse(opts.body)); return { ok: true, status: 200, json: async () => ({ done: true, response: { name: "x" } }) }; };
+    try {
+      E(`db["2020-01-02"] = { type: "trabajo", items: [{ slot: "C", n: "Tarde", k: 700, p: 50, c: 70, f: 20, t: "16:05" }, { slot: "C", n: "Postre", k: 54, p: 8, c: 5, f: 0, t: "16:20" }] };`);
+      await ta("Comidas: con hora registrada se envía a esa hora", async () => {
+        await w.sendFoodDay({ token: "x" }, "2020-01-02");
+        const hm = (c) => new Date(c.nutritionLog.interval.startTime).toTimeString().slice(0, 5);
+        eq(hm(calls[0]), "16:05"); eq(hm(calls[1]), "16:20");
+      });
+      t("Hoy: se guarda la hora solo al registrar en el día de hoy", () => {
+        E(`current = new Date(); current.setHours(12, 0, 0, 0); addItem("D", { n: "Prueba hora", k: 1, p: 0, c: 0, f: 0 });`);
+        const x = E(`getDay(iso(new Date())).items.at(-1)`);
+        eq(/^\d\d:\d\d$/.test(x.t), true, "hora " + x.t);
+        E(`getDay(iso(new Date())).items.pop(); current = new Date("2020-01-03T12:00:00"); addItem("D", { n: "Sin hora", k: 1, p: 0, c: 0, f: 0 });`);
+        eq(E(`db["2020-01-03"].items[0].t`), undefined);
+      });
+      t("Hoy: sin 3 repeticiones, se propone repetir lo último de la franja", () => {
+        E(`db["2020-01-04"] = { type: "trabajo", items: [{ slot: "N", ref: "N4", m: 1, n: "x", k: 1, p: 1, c: 1, f: 1 }] };`);
+        const f = E(`(() => { const r = favorite("N", "2020-01-05"); return r && { id: r.o.id, last: r.last }; })()`);
+        eq(f && f.id, "N4"); eq(f.last, true);
+      });
+    } finally {
+      w.fetch = realFetch;
+      E(`["2020-01-02", "2020-01-03", "2020-01-04"].forEach((k) => delete db[k]); saveAll(db); current = new Date("${prevCur}T12:00:00");`);
+      if (savedSent != null) w.localStorage.setItem(sentKey, savedSent); else w.localStorage.removeItem(sentKey);
+      E(`profile = PROFILES.${prevProfile}; rebuildIndex(); renderHoy();`);
+    }
+  }
+
   for (const [k, v] of Object.entries(saved)) if (v != null) w.localStorage.setItem(k, v); else w.localStorage.removeItem(k);
   E("parseCache.clear()");
   document.getElementById("out").innerHTML = lines.join("\n");

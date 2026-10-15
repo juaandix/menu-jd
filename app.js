@@ -159,34 +159,37 @@ function renderHoy() {
     const hint = s.id === "S" && type.mods ? `${s.hint} · ${type.mods} hoy` : s.hint;
     const st = totals(items);
     const fav = items.length ? null : favorite(s.id, key);
-    return `<div class="slot${items.length ? "" : " is-empty"}">
+    return `<section class="slot${items.length ? "" : " is-empty"}" aria-label="${s.label}">
       <div class="slot-head"><h3>${s.label}<small>${items.length ? `<b>${r0(st.k)} kcal · ${r0(st.p)} g P</b> · ${hint}` : hint}</small></h3>
         <button class="add-btn" data-add="${s.id}" aria-label="Añadir a ${s.label}">+ Añadir</button></div>
-      ${items.length ? items.map((x) => `
-        <div class="entry${entryThumb(x) ? " has-thumb" : ""}">${entryThumb(x)}<button class="name" type="button" data-entry="${x.idx}" aria-label="Editar ${esc(x.n)}"><b>${nameHTML(x.n)}</b><span>${x.ref ? x.ref + " · " : ""}P ${f1(x.p)} · C ${r0(x.c || 0)} · G ${r0(x.f || 0)}${costLabel(itemDishCost(x)) ? " · " + costLabel(itemDishCost(x)) : ""}${x.i ? " · editado" : ""}</span></button>
+      ${items.length ? `<div class="slot-body">${items.map((x) => `
+        <div class="entry${entryThumb(x) ? " has-thumb" : ""}">${entryThumb(x)}<button class="name" type="button" data-entry="${x.idx}" aria-label="Editar ${esc(x.n)}"><b>${nameHTML(x.n)}</b><span>${x.t ? x.t + " · " : ""}P ${f1(x.p)} · C ${r0(x.c || 0)} · G ${r0(x.f || 0)}${costLabel(itemDishCost(x)) ? " · " + costLabel(itemDishCost(x)) : ""}${x.ref && x.i ? " · editado" : ""}</span></button>
           <span class="kc">${r0(x.k)}</span>
-          <button class="del" data-del="${x.idx}" aria-label="Quitar ${esc(x.n)}">${ico("x")}</button></div>`).join("")
-      : fav ? `<button class="chip-opt fav" data-fav="${fav.o.id}|${fav.m}"><span>${ico("plus")} Lo de siempre: ${esc(splitName(withPortion(fav.o.n, fav.m)).t)}</span><small>${r0(fav.o.k * fav.m)} kcal</small></button>` : ""}
-    </div>`;
+          <button class="del" data-del="${x.idx}" aria-label="Quitar ${esc(x.n)}">${ico("x")}</button></div>`).join("")}</div>`
+      : fav ? `<button class="chip-opt fav" data-fav="${fav.o.id}|${fav.m}"><span>${ico("plus")} ${fav.last ? "Repetir" : "Lo de siempre"}: ${esc(splitName(withPortion(fav.o.n, fav.m)).t)}</span><small>${r0(fav.o.k * fav.m)} kcal</small></button>` : ""}
+    </section>`;
   }).join("");
 }
 // "Lo de siempre": el plato (y ración) más repetido en esa franja en los 30 días anteriores, si sale 3 veces o más.
+// Si no hay, "Repetir": el último plato de esa franja (last: true). Nunca uno con algo que falta en casa.
 function favorite(slotId, key) {
   const from = iso(new Date(new Date(key + "T12:00:00").getTime() - 30 * 864e5));
   const count = new Map();
+  let last = null, lastDay = "";
   for (const [k, d] of Object.entries(db)) {
     if (k >= key || k < from) continue;
     for (const x of d.items) {
-      if (x.slot !== slotId || !x.ref || x.i || !byId(x.ref)) continue;
+      if (x.slot !== slotId || !x.ref || x.i || !byId(x.ref) || dishMissing(byId(x.ref)).length) continue;
       const id = x.ref + "|" + r1(entryMult(x));
       count.set(id, (count.get(id) || 0) + 1);
+      if (k >= lastDay) { last = id; lastDay = k; }
     }
   }
   const [best] = [...count.entries()].sort((a, b) => b[1] - a[1]);
-  if (!best || best[1] < 3) return null;
-  const [ref, m] = best[0].split("|");
-  const o = byId(ref);
-  return o && !dishMissing(o).length ? { o, m: +m } : null;
+  const pick = best && best[1] >= 3 ? best[0] : last;
+  if (!pick) return null;
+  const [ref, m] = pick.split("|");
+  return { o: byId(ref), m: +m, last: pick !== (best && best[1] >= 3 && best[0]) };
 }
 // Si falta proteína y quedan kcal: los platos que mejor la cubren sin pasarse (hoy desde las 15 h, o días futuros al planificar).
 function proteinSuggest(day, key, left, pLeft) {
@@ -219,7 +222,7 @@ function openCopySheet() {
 }
 function copyDay(from) {
   const key = iso(current), day = getDay(key);
-  const added = JSON.parse(JSON.stringify(db[from].items));
+  const added = JSON.parse(JSON.stringify(db[from].items)).map(({ t, ...x }) => x);
   day.items.push(...added);
   saveAll(db); renderHoy(); closeSheet();
   toast(`Copiadas ${added.length} comidas`, 6000, { label: "Deshacer", fn: () => {
@@ -278,6 +281,7 @@ function openEntry(idx) {
       <p class="muted small">Ración</p>
       <div class="portion-row">${PORTIONS.map((pt) => `<button class="portion-btn${Math.abs(pt.mult - mult) < 0.01 ? " is-default" : ""}" data-ent-portion="${pt.mult}"><b>${pt.label}×</b><span>${r0((x.k / mult) * pt.mult)} kcal · ${f1((x.p / mult) * pt.mult)} g P</span></button>`).join("")}</div>
       ${multHTML("ent", { k: x.k / mult, p: x.p / mult })}
+      <label class="ent-time">Hora<input type="time" id="entTime" value="${x.t || ""}"></label>
       <p class="muted small">Mover a</p>
       <div class="recent-row">${profile.slots.filter((s) => s.id !== x.slot).map((s) => `<button class="chip-opt" data-ent-move="${s.id}">${s.label}</button>`).join("")}</div>
     </div>
@@ -287,6 +291,11 @@ function openEntry(idx) {
       <button class="btn ghost danger" data-ent-del="1">Borrar</button>
     </div>`;
   $("#sheet").hidden = false; $("#sheetBg").hidden = false;
+}
+function entTime(v) {
+  const x = getDay(entState.key).items[entState.idx];
+  if (v) x.t = v; else delete x.t;
+  saveAll(db); renderHoy();
 }
 function entPortion(mult) {
   const day = getDay(entState.key), x = day.items[entState.idx];
@@ -313,9 +322,11 @@ function deleteEntry(key, idx) {
     const d = getDay(key); d.items.splice(Math.min(idx, d.items.length), 0, x); saveAll(db); renderHoy(); toast("Recuperado");
   } });
 }
+// Hora real (HH:MM) solo si se registra en el propio día; en días pasados o futuros no se inventa.
+const nowHM = () => new Date().toTimeString().slice(0, 5);
 function addItem(slot, item) {
-  const day = getDay(iso(current));
-  day.items.push({ slot, ...item });
+  const key = iso(current), day = getDay(key);
+  day.items.push({ slot, ...item, ...(key === iso(new Date()) ? { t: nowHM() } : {}) });
   saveAll(db); renderHoy();
 }
 function esc(s) { return String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
@@ -825,6 +836,9 @@ function renderMenu() {
   $("#menuLead").textContent = profile.builder
     ? "Pesos en cocinado. Cualquier combinación de desayuno, comida y cena da aproximadamente lo mismo; los snacks ajustan al objetivo del día."
     : "Plan de referencia: cada tarjeta es uno de los platos de tu plan, con sus kcal, proteína, carbohidratos y grasa.";
+  const nDishes = profile.slots.reduce((a, s) => a + profile.menu[s.id].length, 0);
+  $("#tabDishesSub").textContent = `${nDishes} recetas completas`;
+  $("#tabProductsSub").textContent = `${foodOptions().length} alimentos sueltos`;
   renderPantry(); renderMenuList();
   if (menuTab === "productos") renderProductsPane();
 
@@ -1848,6 +1862,7 @@ $("#sheetBody").addEventListener("submit", (e) => {
 });
 $("#prevDay").addEventListener("click", () => { current.setDate(current.getDate() - 1); renderHoy(); });
 $("#nextDay").addEventListener("click", () => { current.setDate(current.getDate() + 1); renderHoy(); });
+$("#sheetBody").addEventListener("change", (e) => { if (e.target.id === "entTime" && entState) entTime(e.target.value); });
 $("#dayType").addEventListener("change", (e) => { getDay(iso(current)).type = e.target.value; saveAll(db); renderHoy(); });
 $("#stepsIn").addEventListener("change", (e) => {
   const day = getDay(iso(current));
@@ -2217,7 +2232,7 @@ $("#healthWeek").addEventListener("click", () => {
    de enviarlo, se borran (batchDelete) y se crean de nuevo. */
 const FOOD_SCOPE = "https://www.googleapis.com/auth/googlehealth.nutrition.writeonly";
 const MEAL_TYPE = { D: "BREAKFAST", C: "LUNCH", S: "SNACK", N: "DINNER" };
-const MEAL_TIME = { D: [8, 0], C: [14, 30], S: [17, 30], N: [21, 0] }; // hora nominal de cada franja (no se registra la real)
+const MEAL_TIME = { D: [8, 0], C: [14, 30], S: [17, 30], N: [21, 0] }; // hora nominal de cada franja, para lo registrado sin hora (x.t)
 const FOOD_PENDING_DAYS = 7; // días cerrados que se revisan para avisar de lo que falta por enviar
 const foodOn = () => !!(profile.health && profile.health.food);
 function foodTokKey() { return `menujd.ghealth.food.tok.${profile.id}.v1`; }
@@ -2225,7 +2240,7 @@ function foodSentKey() { return `menujd.ghealth.food.${profile.id}.v1`; }
 // { since: "YYYY-MM-DD" (primer envío: lo anterior no se reclama), days: { "YYYY-MM-DD": { sig, names: [nombre del dataPoint], at } } }
 function loadFoodSent() { try { return JSON.parse(localStorage.getItem(foodSentKey())) || { days: {} }; } catch { return { days: {} }; } }
 function saveFoodSent(st) { try { localStorage.setItem(foodSentKey(), JSON.stringify(st)); } catch {} }
-const foodSig = (items) => JSON.stringify((items || []).map((x) => [x.slot, x.n, r1(x.k), r1(x.p), r1(x.c), r1(x.f)]));
+const foodSig = (items) => JSON.stringify((items || []).map((x) => [x.slot, x.n, r1(x.k), r1(x.p), r1(x.c), r1(x.f), ...(x.t ? [x.t] : [])]));
 // "empty" (nada que enviar), "pending" (sin enviar), "changed" (cambiado tras enviarlo), "sent", "future".
 function foodState(key, st = loadFoodSent()) {
   if (key > iso(new Date())) return "future";
@@ -2291,7 +2306,7 @@ async function sendFoodDay(tok, key) {
   try {
     for (const x of items) {
       const n = (perSlot[x.slot] = (perSlot[x.slot] || 0) + 1);
-      const [h, m] = MEAL_TIME[x.slot] || [12, 0];
+      const [h, m] = x.t ? [+x.t.slice(0, 2), +x.t.slice(3, 5) - (n - 1) * 5] : MEAL_TIME[x.slot] || [12, 0];
       const start = new Date(key + "T00:00:00"); start.setHours(h, m + (n - 1) * 5, 0, 0);
       const end = new Date(start.getTime() + 5 * 60e3);
       const op = await healthFetch(tok, "nutrition-log/dataPoints", { nutritionLog: {
@@ -2385,7 +2400,7 @@ async function autoFood() {
 document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") autoFood(); });
 window.addEventListener("online", autoFood);
 
-const APP_VERSION = "v31"; // igual que CACHE en sw.js
+const APP_VERSION = "v33"; // igual que CACHE en sw.js
 $("#appVersion").textContent = "Versión de la app: " + APP_VERSION;
 
 /* arranque */

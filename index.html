@@ -58,12 +58,12 @@
     <section id="view-menu" class="view" hidden aria-label="Menú">
       <header class="page-head">
         <h1>Menú</h1>
-        <p class="lead" id="menuLead"></p>
       </header>
-      <div class="seg" role="tablist" aria-label="Qué ver">
-        <button type="button" role="tab" id="tabDishes" data-mtab="platos" aria-selected="true">Platos</button>
-        <button type="button" role="tab" id="tabProducts" data-mtab="productos" aria-selected="false">Productos</button>
+      <div class="mtabs" role="tablist" aria-label="Qué ver">
+        <button type="button" role="tab" id="tabDishes" data-mtab="platos" aria-selected="true" aria-controls="menuList"><b>Platos</b><small id="tabDishesSub">Recetas completas</small></button>
+        <button type="button" role="tab" id="tabProducts" data-mtab="productos" aria-selected="false" aria-controls="productsPane"><b>Productos</b><small id="tabProductsSub">Alimentos sueltos</small></button>
       </div>
+      <p class="lead dishes-only" id="menuLead"></p>
       <div class="products-pane products-only" id="productsPane">
         <input type="search" id="prodSearch" placeholder="Buscar producto…" autocomplete="off">
         <div class="recent-row cat-row" id="prodCats"></div>
