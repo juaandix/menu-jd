@@ -109,7 +109,7 @@ tarta de queso (1/6)    166  14.9   5.3  8.1   # por porción
 
 ## Stack y arquitectura
 - HTML + CSS + JavaScript vanilla, sin build ni dependencias. Mantenerlo así salvo que el usuario pida migrar (su stack habitual: React, Java 17/Spring Boot, PostgreSQL, Docker).
-- Sin fuentes ni recursos externos (todo debe funcionar offline), **excepto** la integración opcional con Google Calendar (ver abajo, solo perfil JD): esa sí carga un script externo, pero solo bajo demanda al pulsar el botón correspondiente, nunca en el arranque.
+- Sin fuentes ni recursos externos (todo debe funcionar offline; la fuente Barlow Condensed va alojada en `fonts/` con su licencia OFL y precacheada en `sw.js`), **excepto** la integración opcional con Google Calendar (ver abajo, solo perfil JD): esa sí carga un script externo, pero solo bajo demanda al pulsar el botón correspondiente, nunca en el arranque.
 - Archivos:
   - `index.html`: selector de perfil (`#profileSelect`) fuera de las vistas, cinco vistas (`#view-hoy`, `#view-menu`, `#view-semana`, `#view-recetas`, `#view-ajustes`), tab bar inferior de 5 pestañas, hoja modal para añadir, toast.
   - `styles.css`: tokens en `:root`, modo oscuro con `prefers-color-scheme`, safe areas (`env(safe-area-inset-*)`), regla `[hidden]{display:none!important}` (necesaria: `.sheet` usa display:grid, `.builder`/`.profile-bar` dependen de ella para ocultarse).
@@ -206,6 +206,11 @@ Tests: abrir `http://localhost:8080/tests.html` (carga la app en un iframe y pru
 - Ajustes: pestaña nueva con Mis productos, Fotos de productos, Copia de seguridad (y versión) y Google. Recetas queda solo con recetas y notas.
 - Sin rótulos pequeños sobre los títulos (el texto va en `.lead`). `--faint` subido a `#7a8db2` (JD) y `#9c84b1` (Cristina): ≥4,5:1 sobre fondo y tarjetas.
 
+## Estilo «marcador deportivo» (elegido por el usuario el 15/10/2026)
+- Voz del marcador: `--score` = Barlow Condensed (500/600/700) para cifras grandes, encabezados de sección, cabecera de fecha, pestañas y etiquetas en mayúsculas con espaciado; el texto de lectura y los controles siguen en la fuente del sistema.
+- Firma: barras segmentadas (`.seg`, máscara `repeating-linear-gradient`; el detector de Impeccable la marca como «stripes», es un falso positivo). Semana: fichas como panel de marcador (rejilla con líneas de 1 px, sin tarjetas dentro de tarjetas).
+- Se mantienen el azul de JD y el violeta de Cristina. Revisado a 390 y 320 px sin scroll horizontal (`.date-wrap{grid-template-columns:minmax(0,1fr)}`).
+
 ## Menú → Productos
 - Pestañas "Platos | Productos" arriba del Menú (`setMenuTab()`; clases `dishes-only` / `products-only` y `#view-menu.show-products`). Productos = todo el catálogo con macros (`foodOptions()`: SHOP + Mis productos, también las versiones cocidas), agrupado por categoría de la compra (`SHOP_CATS`), con buscador, filtro por categoría y foto.
 - Al tocar uno (`openProductSheet`) se abre la hoja de gramos/unidades (`openFoodGrams` con `sheetState.from = "menu"`) con selector de franja (`data-slot-pick`); se propone por la hora si el día abierto es hoy (`guessSlot()`), si no la primera. Se registra con `logFood` en el **día abierto en Hoy** (como "Monta tu día"), así que sirve para planificar días futuros.
@@ -224,7 +229,7 @@ Tests: abrir `http://localhost:8080/tests.html` (carga la app en un iframe y pru
 - Tema oscuro fijo por perfil (azul JD, violeta Cristina), decidido por el usuario: no seguir el modo claro del sistema.
 - Sistema visual en `styles.css`: tokens en `:root` (JD por defecto) y `:root[data-profile="cristina"]` — `--bg/--bg-elev/--surface/-2/-3`, `--line/-2`, `--accent` (texto/trazos) y `--accent-strong` (rellenos y botones), colores de macro `--m-p/--m-c/--m-f`. Fuente del sistema (SF Pro) con `tabular-nums` en todo; `--mono` apunta a la misma fuente. Bordes finos sólidos (nada de discontinuos salvo "lo de siempre").
 - Iconos: SVG en línea con `ico(nombre)` (`ICONS` en `app.js`) y copiados tal cual en `index.html`; no usar emojis en la interfaz (solo "⚠" dentro de `<option>`, que no admite SVG).
-- Hoy: anillo de kcal (`ring()`) + barras de macros (`macroBar()`; solo la proteína tiene objetivo).
+- Hoy: marcador (`scoreboard()`): kcal restantes en grande, % y barra segmentada (`.seg`, se llena animada solo la primera vez por sesión), comido/objetivo/ajuste por pasos; barras de macros (`macroBar()`; solo la proteína tiene objetivo, también segmentada).
 - Números mostrados con coma decimal: `f1()` para mostrar, `r1()` solo para guardar/calcular.
 - Nombres con "(S1 · Lunes)": `splitName()`/`nameHTML()` muestran la etiqueta aparte. En la hoja de añadir, "Toca hoy en el plan" lista los platos cuyo día de la etiqueta coincide con el día abierto (Cristina).
 - Hoy: resumen compacto (kcal restantes, proteína que falta, barras, carbohidratos/grasa/coste en una línea), subtotal por franja, pasos en una línea. Semana: 4 fichas + gráfica SVG de barras (kcal vs objetivo por día). Iconos SVG en la barra inferior.

@@ -105,19 +105,25 @@ function totals(items) {
   return items.reduce((t, x) => ({ k: t.k + x.k, p: t.p + x.p, c: t.c + (x.c || 0), f: t.f + (x.f || 0) }), { k: 0, p: 0, c: 0, f: 0 });
 }
 // Anillo de kcal: arco = comido / objetivo; el centro dice lo que queda (o lo que sobra, en color de aviso).
-function ring(eaten, target, left) {
-  const R = 52, C = 2 * Math.PI * R, pct = Math.max(0, Math.min(1, eaten / target)), over = left < -60;
-  return `<div class="ring${over ? " over" : ""}" role="img" aria-label="${r0(eaten)} de ${r0(target)} kcal">
-    <svg viewBox="0 0 120 120"><circle cx="60" cy="60" r="${R}" class="ring-track"/>
-      <circle cx="60" cy="60" r="${R}" class="ring-val" stroke-dasharray="${(pct * C).toFixed(1)} ${C.toFixed(1)}" transform="rotate(-90 60 60)"/></svg>
-    <div class="ring-c"><strong>${r0(Math.abs(left)).toLocaleString("es-ES")}</strong><span>${left >= 0 ? "kcal restantes" : "kcal de más"}</span></div></div>`;
+// Marcador de Hoy: kcal restantes en grande y barra segmentada (como el marcador de un gimnasio).
+let boardIntro = true; // la barra se llena con animación solo la primera vez que se pinta en la sesión
+function scoreboard(eaten, target, left, adj) {
+  const pct = Math.max(0, Math.min(1, eaten / target)), over = left < -60, fmt = (n) => r0(n).toLocaleString("es-ES");
+  const intro = boardIntro ? " intro" : ""; boardIntro = false;
+  return `<div class="board${over ? " over" : ""}">
+    <div class="board-top" role="img" aria-label="${fmt(Math.abs(left))} kcal ${left >= 0 ? "restantes" : "de más"} de ${fmt(target)}">
+      <strong class="board-num">${fmt(Math.abs(left))}</strong>
+      <span class="board-unit">kcal<br>${left >= 0 ? "restantes" : "de más"}</span>
+      <span class="board-pct">${r0(pct * 100)}<small>%</small></span></div>
+    <div class="seg${intro}" style="--v:${pct.toFixed(3)}"><i></i></div>
+    <div class="board-meta"><span>Comido <b>${fmt(eaten)}</b></span><span>Objetivo <b>${fmt(target)}</b>${adj ? ` <em>${adj > 0 ? "+" : "−"}${Math.abs(adj)} pasos</em>` : ""}</span></div></div>`;
 }
 // Barra de un macro con su color; con objetivo, muestra lo que falta.
 function macroBar(label, key, val, target) {
   const pct = target ? Math.min(100, (val / target) * 100) : 0;
   const right = target ? `<b>${r0(val)}</b> / ${target} g` : `<b>${r0(val)}</b> g`;
   return `<div class="mbar m-${key}"><div class="mbar-l"><span><i class="dot"></i>${label}</span><span>${right}</span></div>
-    ${target ? `<div class="bar"><i style="width:${pct}%"></i></div>${val < target ? `<small>faltan ${r0(target - val)} g</small>` : `<small class="ok">${ico("check")} objetivo cubierto</small>`}` : ""}</div>`;
+    ${target ? `<div class="seg seg-m" style="--v:${(pct / 100).toFixed(3)}"><i></i></div>${val < target ? `<small>faltan ${r0(target - val)} g</small>` : `<small class="ok">${ico("check")} objetivo cubierto</small>`}` : ""}</div>`;
 }
 function renderHoy() {
   const key = iso(current);
@@ -138,20 +144,13 @@ function renderHoy() {
   const pLeft = profile.proteinTarget - t.p;
   const cost = itemsCost(day.items);
   $("#summary").innerHTML = `
-    <div class="hero">
-      ${ring(t.k, target, left)}
-      <div class="hero-side">
-        <div class="hs-row"><span>Objetivo</span><b>${r0(target).toLocaleString("es-ES")}</b></div>
-        ${adj ? `<div class="hs-row sub"><span>por pasos</span><b>${adj > 0 ? "+" : ""}${adj}</b></div>` : ""}
-        <div class="hs-row"><span>Comido</span><b>${r0(t.k).toLocaleString("es-ES")}</b></div>
-        ${cost.priced ? `<div class="hs-row"><span>Coste</span><b>${costLabel(cost)}</b></div>` : ""}
-      </div>
-    </div>
+    ${scoreboard(t.k, target, left, adj)}
     <div class="macro-bars">
       ${macroBar("Proteína", "p", t.p, profile.proteinTarget)}
       ${macroBar("Carbohidratos", "c", t.c)}
       ${macroBar("Grasa", "f", t.f)}
     </div>
+    ${cost.priced ? `<p class="board-cost">Coste del día <b>${costLabel(cost)}</b></p>` : ""}
     ${suggestHTML(day, key, left, pLeft)}`;
   renderSteps(day, type, key, adj);
 
@@ -2181,7 +2180,7 @@ async function autoFood() {
 document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") autoFood(); });
 window.addEventListener("online", autoFood);
 
-const APP_VERSION = "v26"; // igual que CACHE en sw.js
+const APP_VERSION = "v27"; // igual que CACHE en sw.js
 $("#appVersion").textContent = "Versión de la app: " + APP_VERSION;
 
 /* arranque */

@@ -1,9 +1,10 @@
 // Sube la versión cada vez que cambies archivos para que los móviles descarguen la nueva.
-const CACHE = "menujd-v26";
+const CACHE = "menujd-v27";
 // Fotos de productos: caché aparte que no se borra al cambiar de versión (se bajan una vez, al mostrarse).
 const IMG_CACHE = "menujd-img-v1";
 const ASSETS = [
   "./", "index.html", "styles.css", "data.js", "app.js", "manifest.webmanifest",
+  "fonts/barlow-condensed-500.woff2", "fonts/barlow-condensed-600.woff2", "fonts/barlow-condensed-700.woff2",
   "icons/icon-192.png", "icons/icon-512.png", "icons/icon-maskable-512.png", "icons/apple-touch-icon.png",
 ];
 
