@@ -400,6 +400,44 @@ async function run() {
     }
   }
 
+  /* copia de seguridad, escapado de HTML y arreglos de la auditoría */
+  {
+    const prevProfile = E("profile.id"), keys = ["menujd.log.jd.v1", "menujd.log.cristina.v1", "menujd.profile.v1", "menujd.dishes.cristina.v1",
+      "menujd.dishes.jd.v1", "menujd.weight.cristina.v1", "menujd.prices.v1", "menujd.products.v1"];
+    const before = Object.fromEntries(keys.map((k) => [k, w.localStorage.getItem(k)]));
+    try {
+      E(`switchProfile("jd")`);
+      t("Importar: una copia de Cristina va a su registro aunque esté abierto JD", () => {
+        E(`importBackup({ app: "menujd", version: 2, profile: "cristina", log: { "2020-02-01": { type: "estandar", items: [{ slot: "D", n: "Prueba", k: 100, p: 5, c: 10, f: 2 }] } }, weight: { "2020-02-01": 70.5 } }, "copia.json")`);
+        eq(E("profile.id"), "cristina", "cambia al perfil del archivo");
+        eq(JSON.parse(w.localStorage.getItem("menujd.log.cristina.v1"))["2020-02-01"].items[0].n, "Prueba");
+        eq((JSON.parse(w.localStorage.getItem("menujd.log.jd.v1")) || {})["2020-02-01"], undefined, "no toca el registro de JD");
+        eq(JSON.parse(w.localStorage.getItem("menujd.weight.cristina.v1"))["2020-02-01"], 70.5);
+      });
+      t("Importar: una copia v1 sin perfil va al perfil del nombre del archivo", () => {
+        E(`importBackup({ "2020-02-02": { type: "trabajo", items: [] } }, "menujd-registro-jd-2020-02-02.json")`);
+        eq(E("profile.id"), "jd"); eq(E(`!!db["2020-02-02"]`), true);
+      });
+      t("Menú: los ingredientes se pintan escapados (un nombre con HTML no se ejecuta)", () => {
+        const html = E(`cardHTML({ id: "X1", n: "x", i: ['100 g de <img src=x onerror="window.__xss=1">'], k: 1, p: 1, c: 1, f: 1, t: "<b>t</b>" }, false)`);
+        eq(html.includes("<img"), false, "sin etiqueta img"); eq(html.includes("&lt;b&gt;t"), true, "nota escapada");
+      });
+      t("Perfil: cambiar de perfil anula el Deshacer pendiente del otro", () => {
+        E(`toast("x", 6000, { label: "Deshacer", fn: () => {} }); switchProfile("cristina")`);
+        eq(E("toastAction"), null); E(`switchProfile("jd")`);
+      });
+      t("+ Hoy guarda la ración (m: 1)", () => {
+        const b = w.document.createElement("button"); b.dataset.quick = "D1"; w.document.body.appendChild(b); b.click(); b.remove();
+        const x = E(`getDay(iso(new Date())).items.at(-1)`);
+        eq(x.ref, "D1"); eq(x.m, 1);
+        E(`getDay(iso(new Date())).items.pop(); saveAll(db)`);
+      });
+    } finally {
+      for (const [k, v] of Object.entries(before)) if (v != null) w.localStorage.setItem(k, v); else w.localStorage.removeItem(k);
+      E(`profile = PROFILES.${prevProfile}; applyProfileTheme(); rebuildIndex(); db = loadAll(); prices = loadPrices(); parseCache.clear(); renderProfileSelect(); renderMenu(); renderRecetas(); show("hoy");`);
+    }
+  }
+
   for (const [k, v] of Object.entries(saved)) if (v != null) w.localStorage.setItem(k, v); else w.localStorage.removeItem(k);
   E("parseCache.clear()");
   document.getElementById("out").innerHTML = lines.join("\n");

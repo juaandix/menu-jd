@@ -115,7 +115,7 @@ tarta de queso (1/6)    166  14.9   5.3  8.1   # por porción
   - `styles.css`: tokens en `:root`, modo oscuro con `prefers-color-scheme`, safe areas (`env(safe-area-inset-*)`), regla `[hidden]{display:none!important}` (necesaria: `.sheet` usa display:grid, `.builder`/`.profile-bar` dependen de ella para ocultarse).
   - `data.js`: `const PROFILES = { jd, cristina }` — ver "Arquitectura multi-perfil" arriba. Cada plato: `{id, n, i:[ingredientes], k, p, c, f, t?}`.
   - `app.js`: `profile` = perfil activo (variable reasignada por `switchProfile()`); render de vistas, registro, calculadora, export/import JSON, registro del service worker, integración con Google Calendar. No quedan constantes globales tipo `MENU`/`DAY_TYPES`: todo cuelga de `profile.*`.
-  - `sw.js`: caché `menujd-vN`, estrategia red primero con fallback a caché para peticiones del propio origen. Subir N en cada despliegue, y también `APP_VERSION` en `app.js` (se muestra en Ajustes para comprobar qué versión tiene cargada el móvil). Las peticiones a otros orígenes (Google) se dejan pasar sin interceptar ni cachear.
+  - `sw.js`: caché `menujd-vN`, estrategia red primero con fallback a caché para peticiones del propio origen. Siempre saltando la caché HTTP del navegador (`cache: "reload"` al instalar, `cache: "no-cache"` al pedir), porque GitHub Pages da `max-age=600` y si no, tras un despliegue se mezclaban `index.html` y `app.js` de versiones distintas. Solo se guardan respuestas `ok`. Subir N en cada despliegue, y también `APP_VERSION` en `app.js` (se muestra en Ajustes para comprobar qué versión tiene cargada el móvil). Las peticiones a otros orígenes (Google) se dejan pasar sin interceptar ni cachear.
   - `manifest.webmanifest` + `icons/` (192, 512, maskable 512, apple-touch-icon 180).
   - `fonts/`: Barlow Condensed 500/600/700 (woff2, latin) + `OFL-BarlowCondensed.txt`. `img/p/`: fotos del catálogo + `credits.json`.
   - `privado/` (no se sube, `.gitignore`): `tickets-mercadona/`, `referencias/` (plan de la dietista, zip original de la app) y `capturas/`. Los documentos personales nuevos van ahí, nunca en la raíz (la raíz es lo que publica GitHub Pages).
@@ -145,6 +145,8 @@ tarta de queso (1/6)    166  14.9   5.3  8.1   # por porción
 
 ### Enviar comidas a Google Health (solo JD: `health.food: true`)
 - **Un envío por día**: cada comida registrada se manda como una entrada `nutrition-log` de alimento anónimo (`POST …/nutrition-log/dataPoints` con `foodDisplayName`, `mealType`, `energy.kcal`, `totalCarbohydrate`, `totalFat` y `nutrients:[{nutrient:"PROTEIN"}]`). Franjas → `BREAKFAST/LUNCH/SNACK/DINNER`, a la hora real (`x.t`) si la tiene; si no, hora nominal (8:00, 14:30, 17:30, 21:00; varias en la misma franja, +5 min cada una). `t` entra en la firma solo si existe (los días ya enviados no cambian).
+- Los tres tokens (calendario, pasos/peso, comidas) se piden con `requestToken(key, scope, check)`, cada uno con su clave de sesión.
+- Un solo envío de comidas a la vez (`foodAutoBusy`, compartido por el botón y `autoFood()`): si no, el mismo día se mandaba dos veces.
 - Permiso `googlehealth.nutrition.writeonly`, con token propio (`sessionStorage["menujd.ghealth.food.tok.<id>.v1"]`), separado del de pasos y peso.
 - **Por qué no hay "envío automático a las 23:59"**: sin servidor no se puede ejecutar nada a una hora fija (iOS no deja segundo plano a una PWA) y Google solo da un token nuevo tras una pulsación. Así que: botón en Hoy (bajo los pasos) para enviar el día por la noche; al abrir la app después (`autoFood()`: arranque, `visibilitychange`, `online`) los días ya terminados que falten se envían solos si el token sigue vivo; si no, el botón se resalta ("Enviar ayer" / "Enviar N días").
 - El botón envía primero los días terminados pendientes; el de hoy solo cuando no queda nada atrás.
@@ -158,7 +160,7 @@ tarta de queso (1/6)    166  14.9   5.3  8.1   # por porción
 - Diseño mobile-first, objetivos táctiles ≥ 44 px, sin scroll horizontal.
 
 ## Herramientas de diseño y pruebas (solo en este Mac)
-- Skills de terceros revisadas e instaladas en `.claude/skills/` (no se suben: `.claude/` está en `.gitignore`): `ui-ux-pro-max`, `design-taste-frontend` (Taste Skill), `impeccable`, `emil-design-eng`, `review-animations`, `improve-animations`, `animate`, `design-motion-principles`, `web-design-guidelines` (Vercel) y `playwright-cli`.
+- Skills de terceros revisadas e instaladas en `.claude/skills/` (no se suben: `.claude/` está en `.gitignore`): `ui-ux-pro-max`, `design-taste-frontend` (Taste Skill), `impeccable`, `emil-design-eng`, `review-animations`, `improve-animations`, `animate`, `design-motion-principles`, `web-design-guidelines` (Vercel), `playwright-cli` y Ponytail (`ponytail`, `ponytail-review`, `ponytail-audit`, `ponytail-debt`, `ponytail-gain`, `ponytail-help`; de github.com/DietrichGebert/ponytail, MIT, commit 84740e3: solo los SKILL.md, sin los hooks de Node del plugin).
 - `impeccable` descarga un binario de sus releases de GitHub la primera vez que se usa su CLI (con comprobación sha256): avisar antes de usarla así.
 - `playwright-cli` (npm global `@playwright/cli@0.1.22`) usa el Chrome instalado: `playwright-cli open http://localhost:8080/ --browser=chrome`, `resize 390 844`, `screenshot --filename=…`, `console`, `eval "() => …"`, `close`. Deja una carpeta `.playwright-cli/` (ignorada).
 - El tema oscuro azul/violeta y el sistema visual actual los decidió el usuario: las skills de diseño se usan para revisar y pulir, no para rehacer la estética sin preguntar.
@@ -180,7 +182,7 @@ Tests: abrir `http://localhost:8080/tests.html` (carga la app en un iframe y pru
 - **Precios**: los introduce el usuario (€/kg, €/l o €/ud) en Semana → Precios; `localStorage["menujd.prices.v1"]`, comunes a todos los perfiles. No hay precios por defecto (no inventarlos). La lista muestra lo usado en platos, en lo registrado (`x.i`) y en Mis productos. Coste de plato/día/semana/lista = suma de lo que tenga precio; "≥" si falta alguno.
 - Las entradas nuevas del registro guardan `m` (ración); en las antiguas se deduce de las kcal.
 - "Monta tu día" añade el plan al día abierto en Hoy (no siempre a hoy), para poder planificar días futuros.
-- Copia de seguridad v2: `{ app:"menujd", version:2, profile, log, weight, prices }`; la importación acepta también el formato antiguo (objeto de días).
+- Copia de seguridad v2: `{ app:"menujd", version:2, profile, log, weight, prices }`; la importación (`importBackup(data, fileName)`, con tests) acepta también el formato antiguo (objeto de días).
 
 ## Editor de platos y Mis productos
 - Botón "✎ Cambiar" en cada tarjeta del Menú: cambiar, quitar o añadir ingredientes. Los macros se ajustan **por diferencia** (plato − ingrediente quitado + ingrediente nuevo), así el resto conserva sus valores originales.

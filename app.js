@@ -2,6 +2,7 @@
 const $ = (s) => document.querySelector(s);
 const r0 = (x) => Math.round(x);
 const r1 = (x) => Math.round(x * 10) / 10;
+const numES = (v) => parseFloat(String(v).replace(",", ".")); // número escrito con coma o punto (NaN si no hay)
 const f1 = (x) => r1(x).toLocaleString("es-ES"); // para mostrar: coma decimal
 // Los platos del plan de Cristina llevan "(S1 · Lunes)" en el nombre: se muestra aparte, como etiqueta.
 const TAG_RE = /\s*\((S\d+\s*·\s*[^)]+)\)/;
@@ -104,7 +105,6 @@ function getDay(key) {
 function totals(items) {
   return items.reduce((t, x) => ({ k: t.k + x.k, p: t.p + x.p, c: t.c + (x.c || 0), f: t.f + (x.f || 0) }), { k: 0, p: 0, c: 0, f: 0 });
 }
-// Anillo de kcal: arco = comido / objetivo; el centro dice lo que queda (o lo que sobra, en color de aviso).
 // Marcador de Hoy: kcal restantes en grande y barra segmentada (como el marcador de un gimnasio).
 let boardIntro = true; // la barra se llena con animación solo la primera vez que se pinta en la sesión
 function scoreboard(eaten, target, left, adj) {
@@ -218,7 +218,7 @@ function openCopySheet() {
         return `<button class="opt rec" data-copy-from="${k}"><span>${esc(dayLabel(new Date(k + "T12:00:00")))}<small>${esc(db[k].items.map((x) => splitName(x.n).t).join(" · "))}</small></span><span class="kc">${r0(t.k)} kcal<br>${r0(t.p)} g P</span></button>`;
       }).join("")}</div>`
     : `<p class="empty">No hay días anteriores con comidas registradas.</p>`;
-  $("#sheet").hidden = false; $("#sheetBg").hidden = false;
+  openSheetShell();
 }
 function copyDay(from) {
   const key = iso(current), day = getDay(key);
@@ -290,7 +290,7 @@ function openEntry(idx) {
       <button class="btn ghost" data-ent-dup="1">Duplicar</button>
       <button class="btn ghost danger" data-ent-del="1">Borrar</button>
     </div>`;
-  $("#sheet").hidden = false; $("#sheetBg").hidden = false;
+  openSheetShell();
 }
 function entTime(v) {
   const x = getDay(entState.key).items[entState.idx];
@@ -353,7 +353,7 @@ function openSheet(slot) {
   const s = profile.slots.find((x) => x.id === slot);
   $("#sheetTitle").textContent = "Añadir · " + s.label;
   showSheetList();
-  $("#sheet").hidden = false; $("#sheetBg").hidden = false;
+  openSheetShell();
 }
 function showSheetList() {
   const slot = sheetState.slot;
@@ -439,14 +439,14 @@ function openWebForm(q) {
       <button class="btn" type="submit">Registrar y guardar en Mis productos</button>
     </form>`;
   const prev = () => {
-    const num = (id) => parseFloat($(id).value.replace(",", ".")) || 0, g = num("#wfG");
+    const num = (id) => numES($(id).value) || 0, g = num("#wfG");
     $("#wfPrev").innerHTML = num("#wfK") && g ? `${fmtG(g)} g → <b>${macrosTxt({ k: num("#wfK") * g / 100, p: num("#wfP") * g / 100, c: num("#wfC") * g / 100, f: num("#wfF") * g / 100 })}</b>` : "";
   };
   $("#webForm").addEventListener("input", prev);
   prev();
 }
 function saveWebForm() {
-  const num = (id) => parseFloat($(id).value.replace(",", ".")) || 0;
+  const num = (id) => numES($(id).value) || 0;
   let n = $("#wfName").value.trim().replace(/\s+/g, " "); n = n.charAt(0).toUpperCase() + n.slice(1);
   const k = num("#wfK"), g = num("#wfG");
   if (!n || !$("#wfK").value.trim() || !(g > 0)) { toast("Pon el nombre, las kcal por 100 g y los gramos"); return; }
@@ -480,14 +480,14 @@ function unitsHTML(o, target) {
 const gramsLabel = (o) => (o.c.u === "ml" ? "Gramos (o ml)" : "Gramos");
 function syncUnits() {
   document.querySelectorAll(".units").forEach((box) => {
-    const n = (parseFloat($("#" + box.dataset.target).value.replace(",", ".")) || 0) / +box.dataset.ug;
+    const n = (numES($("#" + box.dataset.target).value) || 0) / +box.dataset.ug;
     box.querySelector(".units-v").textContent = f1(n);
     box.querySelectorAll("[data-u-set]").forEach((c) => c.classList.toggle("on", Math.abs(+c.dataset.uSet - n) < 0.01));
   });
 }
 function stepUnits(b) {
   const box = b.closest(".units"), inp = $("#" + box.dataset.target), g = +box.dataset.ug;
-  const cur = (parseFloat(inp.value.replace(",", ".")) || 0) / g;
+  const cur = (numES(inp.value) || 0) / g;
   const n = b.dataset.uSet ? +b.dataset.uSet : Math.max(0.5, Math.round(cur * 2) / 2 + +b.dataset.uStep);
   inp.value = fmtG(n * g);
   inp.dispatchEvent(new Event("input"));
@@ -523,7 +523,7 @@ function openFoodGrams(optId) {
       <p class="ed-sum" id="ffPrev"></p>
       <button class="btn" type="submit" id="ffGo">${sheetState.from === "menu" ? `Añadir a ${esc(profile.slots.find((s) => s.id === sheetState.slot).label)}` : "Registrar"}</button>
     </form>`;
-  const prev = () => { const g = (parseFloat($("#ffG").value.replace(",", ".")) || 0) * (o.c.u === "ml" ? o.c.dens || 1 : 1); $("#ffPrev").innerHTML = g ? `<b>${macrosTxt({ k: o.nut[0] * g / 100, p: o.nut[1] * g / 100, c: o.nut[2] * g / 100, f: o.nut[3] * g / 100 })}</b>` : ""; };
+  const prev = () => { const g = (numES($("#ffG").value) || 0) * (o.c.u === "ml" ? o.c.dens || 1 : 1); $("#ffPrev").innerHTML = g ? `<b>${macrosTxt({ k: o.nut[0] * g / 100, p: o.nut[1] * g / 100, c: o.nut[2] * g / 100, f: o.nut[3] * g / 100 })}</b>` : ""; };
   $("#ffG").addEventListener("input", () => { prev(); syncUnits(); }); prev(); syncUnits();
 }
 function openPortionStep(dishId) {
@@ -543,6 +543,7 @@ function openPortionStep(dishId) {
       <button class="btn ghost" type="button" data-ed-logdish="${o.id}">${ico("edit")} Cambiar ingredientes solo para hoy</button>
     </div>`;
 }
+function openSheetShell() { $("#sheet").hidden = false; $("#sheetBg").hidden = false; }
 function closeSheet() { $("#sheet").hidden = true; $("#sheetBg").hidden = true; }
 
 /* ---------- fotos de productos ----------
@@ -641,7 +642,7 @@ function qtyVal(s) {
   const frac = { "½": 0.5, "¼": 0.25, "¾": 0.75 };
   const m = s.match(/^(\d*)([½¼¾])$/);
   if (m) return (+m[1] || 0) + frac[m[2]];
-  const nums = s.split(/[-–]/).map((x) => parseFloat(x.replace(",", ".")));
+  const nums = s.split(/[-–]/).map(numES);
   return nums.reduce((a, b) => a + b, 0) / nums.length;
 }
 const parseCache = new Map();
@@ -749,8 +750,8 @@ function cardHTML(o, addable = true) {
       <span class="dish-name">${nameHTML(o.n)}${o.mod ? ` <span class="mod-tag">modificado</span>` : ""}${miss.length ? `<small class="miss-mark">${ico("alert")} falta ${esc(missNames(miss))}</small>` : ""}</span>
       <span class="kc"><b>${o.k}</b> kcal<br>${r0(o.p)} g P</span></summary>
     <div class="dish-body">
-    <ul>${o.i.map((x) => `<li>${x}</li>`).join("")}</ul>
-    ${o.t ? `<p class="tip">${o.t}</p>` : ""}
+    <ul>${o.i.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>
+    ${o.t ? `<p class="tip">${esc(o.t)}</p>` : ""}
     ${miss.length ? `<p class="miss-note"><span>${ico("alert")} Te falta: ${esc(missNames(miss))}</span><button class="add-btn" data-fix="${o.id}">Sustituir</button></p>` : ""}
     <div class="macros"><span>P <b>${r0(o.p)}</b></span><span>C ${r0(o.c)}</span><span>G ${r0(o.f)}</span>${costLabel(dishCost(o)) ? `<span class="cost">${costLabel(dishCost(o))}</span>` : ""}
     ${addable ? `<span class="card-btns"><button class="add-btn edit-btn" data-edit="${o.id}" aria-label="Cambiar ingredientes de ${esc(o.n)}">${ico("edit")} Cambiar</button><button class="add-btn" data-quick="${o.id}">+ Hoy</button></span>` : ""}</div></div></details>`;
@@ -773,7 +774,7 @@ function openMissingSheet() {
     <p class="muted small">Toca para marcar o desmarcar. Cuando lo compres, desmárcalo (o márcalo en la lista de la compra).</p>`;
   renderMissingList();
   $("#missSearch").addEventListener("input", (e) => { sheetState.query = e.target.value; renderMissingList(); });
-  $("#sheet").hidden = false; $("#sheetBg").hidden = false;
+  openSheetShell();
 }
 function renderMissingList() {
   const q = norm(sheetState.query || ""), miss = loadMissing();
@@ -817,7 +818,7 @@ function openProductSheet(optId) {
   sheetState = { slot: guessSlot(), query: "", from: "menu" };
   $("#sheetTitle").textContent = "Añadir producto";
   openFoodGrams(optId);
-  $("#sheet").hidden = false; $("#sheetBg").hidden = false;
+  openSheetShell();
 }
 $("#view-menu").addEventListener("click", (e) => {
   const tab = e.target.closest("[data-mtab]"), cat = e.target.closest("[data-prod-cat]"), add = e.target.closest("[data-prod-add]");
@@ -893,7 +894,7 @@ function showEditor(state, title) {
   ed = state;
   $("#sheetTitle").textContent = title;
   renderEditor();
-  $("#sheet").hidden = false; $("#sheetBg").hidden = false;
+  openSheetShell();
 }
 function openEditor(id) {
   const o = byId(id), slot = slotOf(id);
@@ -1266,7 +1267,7 @@ function openGrams(optId) {
         <button class="btn" data-ed-apply="1">${ed.qtyOnly ? "Guardar cantidad" : ed.idx != null ? "Cambiar" : "Añadir"}</button>
       </div>
     </div>`;
-  $("#edGrams").addEventListener("input", (e) => { ed.grams = parseFloat(e.target.value.replace(",", ".")) || 0; ed.fit = ed.fit && "manual"; renderGramsPreview(); syncUnits(); });
+  $("#edGrams").addEventListener("input", (e) => { ed.grams = numES(e.target.value) || 0; ed.fit = ed.fit && "manual"; renderGramsPreview(); syncUnits(); });
   renderGramsPreview(); syncUnits();
 }
 // Cómo se calculan los gramos del sustituto. "auto" busca el mejor equilibrio entre kcal y proteína
@@ -1489,7 +1490,7 @@ function openPlanSheet() {
   $("#sheetTitle").textContent = "Planificar la semana";
   $("#sheetBody").innerHTML = `<p class="muted small">Se rellenan ${targets.length} ${targets.length === 1 ? "día vacío" : "días vacíos"} desde hoy: ${targets.map((d) => d.toLocaleDateString("es-ES", { weekday: "short", day: "numeric" })).join(", ")}. Luego cada día se puede cambiar en Hoy, y la lista de la compra sale de lo planificado.</p>
     <div class="ed-options">${opts.map((o) => `<button class="opt rec" data-plan="${o.id}"${o.off ? " disabled" : ""}><span>${o.t}<small>${o.s}</small></span><span class="kc">${ico("next")}</span></button>`).join("")}</div>`;
-  $("#sheet").hidden = false; $("#sheetBg").hidden = false;
+  openSheetShell();
 }
 const itemFrom = (o, slot) => ({ slot: slot || slotOf(o.id), ref: o.id, m: 1, n: o.n, ...scaled(o, 1) });
 function planWeek(mode) {
@@ -1678,7 +1679,7 @@ $("#prevWeek").addEventListener("click", () => { weekStart.setDate(weekStart.get
 $("#nextWeek").addEventListener("click", () => { weekStart.setDate(weekStart.getDate() + 7); renderSemana(); });
 $("#weightForm").addEventListener("submit", (e) => {
   e.preventDefault();
-  const kg = parseFloat($("#wKg").value.replace(",", "."));
+  const kg = numES($("#wKg").value);
   const date = $("#wDate").value;
   if (!date || !(kg > 20 && kg < 400)) { toast("Revisa el peso"); return; }
   const w = loadWeights(); w[date] = Math.round(kg * 10) / 10; saveWeights(w);
@@ -1703,7 +1704,7 @@ $("#shopCopy").addEventListener("click", async () => {
 });
 $("#priceList").addEventListener("change", (e) => {
   const key = e.target.dataset.price; if (!key) return;
-  const v = parseFloat(e.target.value.replace(",", "."));
+  const v = numES(e.target.value);
   if (Number.isFinite(v) && v >= 0) prices[key] = v; else delete prices[key];
   savePrices();
   e.target.blur();
@@ -1737,7 +1738,8 @@ function renderProfileSelect() {
 function switchProfile(id) {
   if (!PROFILES[id] || PROFILES[id].id === profile.id) return;
   profile = PROFILES[id];
-  localStorage.setItem(PROFILE_KEY, profile.id);
+  try { localStorage.setItem(PROFILE_KEY, profile.id); } catch {}
+  toastAction = null; $("#toast").hidden = true; // un "Deshacer" pendiente era del otro perfil
   applyProfileTheme();
   rebuildIndex();
   db = loadAll();
@@ -1837,13 +1839,13 @@ document.addEventListener("click", (e) => {
   else if (b.dataset.edFixlog) { const o = byId(b.dataset.edFixlog), miss = dishMissing(o); openLogEditor(o.id); if (miss.length) openPicker(miss[0].idx); }
   else if (b.id === "planWeek") openPlanSheet();
   else if (b.dataset.plan) planWeek(b.dataset.plan);
-  else if (b.dataset.quick) { const o = byId(b.dataset.quick); current = new Date(); current.setHours(12, 0, 0, 0); pushRecent(slotOf(o.id), o.id); addItem(slotOf(o.id), { ref: o.id, n: o.n, k: o.k, p: o.p, c: o.c, f: o.f }); toast("Añadido a hoy: " + o.n); }
+  else if (b.dataset.quick) { const o = byId(b.dataset.quick); current = new Date(); current.setHours(12, 0, 0, 0); pushRecent(slotOf(o.id), o.id); addItem(slotOf(o.id), { ref: o.id, m: 1, n: o.n, ...scaled(o, 1) }); toast("Añadido a hoy: " + o.n); }
 });
 $("#sheetClose").addEventListener("click", closeSheet);
 $("#sheetBg").addEventListener("click", closeSheet);
 $("#sheetBody").addEventListener("submit", (e) => {
   e.preventDefault();
-  const num = (id) => parseFloat($(id).value.replace(",", ".")) || 0;
+  const num = (id) => numES($(id).value) || 0;
   if (e.target.id === "webForm") { saveWebForm(); return; }
   if (e.target.id === "foodForm") { logFood(e.target.dataset.opt, num("#ffG")); return; }
   if (e.target.id === "prodForm") {
@@ -1880,7 +1882,7 @@ $("#bApply").addEventListener("click", () => {
   if (!profile.builder) return;
   const day = getDay(iso(current));
   day.type = $("#bT").value;
-  ["#bD", "#bC", "#bN"].forEach((id) => { const o = byId($(id).value); day.items.push({ slot: slotOf(o.id), ref: o.id, n: o.n, k: o.k, p: o.p, c: o.c, f: o.f }); });
+  ["#bD", "#bC", "#bN"].forEach((id) => day.items.push(itemFrom(byId($(id).value))));
   saveAll(db); show("hoy"); toast("Plan añadido a " + shortDay(current));
 });
 
@@ -1893,35 +1895,36 @@ $("#exportBtn").addEventListener("click", () => {
   document.body.appendChild(a); a.click(); a.remove();
   $("#backupMsg").textContent = "Registro exportado.";
 });
+// v2: { app, version, profile, log, weight, prices }; v1 (antiguo): directamente { "YYYY-MM-DD": día }.
+// Cada copia va a su perfil: el de dentro del archivo (v2) o el del nombre "menujd-registro-<id>-fecha.json" (v1).
+function importBackup(data, fileName) {
+  if (!data || typeof data !== "object" || Array.isArray(data)) throw new Error();
+  const target = (data.app === "menujd" && data.profile) || (fileName.match(/menujd-registro-([a-z0-9]+)-/i) || [])[1];
+  let note = "";
+  if (target && PROFILES[target] && target !== profile.id) {
+    switchProfile(target); show("recetas");
+    note = ` El archivo era del perfil ${PROFILES[target].label}: he cambiado a ese perfil.`;
+  } else if (!target || !PROFILES[target]) note = ` El archivo no indica de qué perfil es: se ha importado en ${profile.label}.`;
+  const log = data.app === "menujd" ? data.log || {} : data;
+  db = { ...db, ...log }; saveAll(db);
+  let extra = "";
+  if (data.app === "menujd" && data.weight) { saveWeights({ ...loadWeights(), ...data.weight }); extra += `, ${Object.keys(data.weight).length} pesos`; }
+  if (data.app === "menujd" && data.prices) { prices = { ...prices, ...data.prices }; savePrices(); extra += ", precios"; }
+  if (data.app === "menujd" && Array.isArray(data.products) && data.products.length) {
+    const keys = new Set(data.products.map((p) => p.key));
+    saveProducts([...userProducts().filter((p) => !keys.has(p.key)), ...data.products]); extra += `, ${data.products.length} productos`;
+  }
+  if (data.app === "menujd" && data.dishes && Object.keys(data.dishes).length) {
+    saveDishOverrides({ ...loadDishOverrides(), ...data.dishes }); extra += `, ${Object.keys(data.dishes).length} platos modificados`;
+  }
+  afterDishChange(); renderProducts();
+  $("#backupMsg").textContent = `Importados ${Object.keys(log).length} días${extra} en ${profile.label}.${note}`;
+  toast(`Importado en ${profile.label}`, 3000);
+}
 $("#importFile").addEventListener("change", async (e) => {
   const f = e.target.files[0]; if (!f) return;
-  try {
-    const data = JSON.parse(await f.text());
-    if (!data || typeof data !== "object" || Array.isArray(data)) throw new Error();
-    // v2: { app, version, profile, log, weight, prices }; v1 (antiguo): directamente { "YYYY-MM-DD": día }.
-    // Cada copia va a su perfil: el de dentro del archivo (v2) o el del nombre "menujd-registro-<id>-fecha.json" (v1).
-    const target = (data.app === "menujd" && data.profile) || (f.name.match(/menujd-registro-([a-z0-9]+)-/i) || [])[1];
-    let note = "";
-    if (target && PROFILES[target] && target !== profile.id) {
-      switchProfile(target); show("recetas");
-      note = ` El archivo era del perfil ${PROFILES[target].label}: he cambiado a ese perfil.`;
-    } else if (!target || !PROFILES[target]) note = ` El archivo no indica de qué perfil es: se ha importado en ${profile.label}.`;
-    const log = data.app === "menujd" ? data.log || {} : data;
-    db = { ...db, ...log }; saveAll(db);
-    let extra = "";
-    if (data.app === "menujd" && data.weight) { saveWeights({ ...loadWeights(), ...data.weight }); extra += `, ${Object.keys(data.weight).length} pesos`; }
-    if (data.app === "menujd" && data.prices) { prices = { ...prices, ...data.prices }; savePrices(); extra += ", precios"; }
-    if (data.app === "menujd" && Array.isArray(data.products) && data.products.length) {
-      const keys = new Set(data.products.map((p) => p.key));
-      saveProducts([...userProducts().filter((p) => !keys.has(p.key)), ...data.products]); extra += `, ${data.products.length} productos`;
-    }
-    if (data.app === "menujd" && data.dishes && Object.keys(data.dishes).length) {
-      saveDishOverrides({ ...loadDishOverrides(), ...data.dishes }); extra += `, ${Object.keys(data.dishes).length} platos modificados`;
-    }
-    afterDishChange(); renderProducts();
-    $("#backupMsg").textContent = `Importados ${Object.keys(log).length} días${extra} en ${profile.label}.${note}`;
-    toast(`Importado en ${profile.label}`, 3000);
-  } catch { $("#backupMsg").textContent = "Ese archivo no es una copia válida del registro."; }
+  try { importBackup(JSON.parse(await f.text()), f.name); }
+  catch { $("#backupMsg").textContent = "Ese archivo no es una copia válida del registro."; }
   e.target.value = "";
 });
 
@@ -1936,10 +1939,8 @@ function gcalCfg() {
 }
 function saveGcalCfg(cfg) { localStorage.setItem(gcalCfgKey(), JSON.stringify(cfg)); }
 function gcalToken() { try { return JSON.parse(sessionStorage.getItem(gcalTokKey())); } catch { return null; } }
-function saveGcalToken(t) { sessionStorage.setItem(gcalTokKey(), JSON.stringify(t)); }
 function clearGcalToken() { sessionStorage.removeItem(gcalTokKey()); }
 
-let gcalTokenClient = null;
 function loadGIS() {
   return new Promise((resolve, reject) => {
     if (window.google && window.google.accounts && window.google.accounts.oauth2) return resolve();
@@ -1951,26 +1952,34 @@ function loadGIS() {
     document.head.appendChild(s);
   });
 }
-async function ensureGcalToken() {
-  const tok = gcalToken();
-  if (tok && tok.exp > Date.now() + 30000) return tok.token;
+// Pide un token de Google con esos permisos (ventana de Google) y lo guarda en sessionStorage[key].
+// Sin mezclar permisos ya concedidos (include_granted_scopes: false): la Health API rechaza tokens con scopes ajenos
+// (403 DISALLOWED_OAUTH_SCOPES). check(resp) devuelve un error si falta algo, o los datos extra que se guardan con el token.
+async function requestToken(key, scope, check = () => ({})) {
   const cfg = gcalCfg();
   if (!cfg.clientId) throw new Error("Configura primero el Client ID en Ajustes → Google.");
   await loadGIS();
   return new Promise((resolve, reject) => {
-    gcalTokenClient = google.accounts.oauth2.initTokenClient({
+    google.accounts.oauth2.initTokenClient({
       client_id: cfg.clientId,
-      scope: "https://www.googleapis.com/auth/calendar.readonly",
+      scope,
       include_granted_scopes: false,
       callback: (resp) => {
-        if (resp.error) return reject(new Error(resp.error));
-        saveGcalToken({ token: resp.access_token, exp: Date.now() + resp.expires_in * 1000 });
-        resolve(resp.access_token);
+        if (resp.error) return reject(new Error(resp.error === "access_denied" ? "Google denegó el acceso (¿tu cuenta está en usuarios de prueba?)" : resp.error));
+        const extra = check(resp);
+        if (extra instanceof Error) return reject(extra);
+        const t = { token: resp.access_token, exp: Date.now() + resp.expires_in * 1000, ...extra };
+        try { sessionStorage.setItem(key, JSON.stringify(t)); } catch {}
+        resolve(t);
       },
       error_callback: (err) => reject(new Error((err && err.type) || "No se pudo conectar con Google")),
-    });
-    gcalTokenClient.requestAccessToken({ prompt: "" });
+    }).requestAccessToken({ prompt: "" });
   });
+}
+const tokenAlive = (tok) => tok && tok.exp > Date.now() + 30000;
+async function ensureGcalToken() {
+  const tok = gcalToken();
+  return (tokenAlive(tok) ? tok : await requestToken(gcalTokKey(), "https://www.googleapis.com/auth/calendar.readonly")).token;
 }
 async function detectWorkDay(date) {
   const token = await ensureGcalToken();
@@ -2010,11 +2019,11 @@ $("#gcalSave").addEventListener("click", () => {
   const clientId = $("#gcalClientId").value.trim();
   const keyword = $("#gcalKeyword").value.trim() || "turno";
   saveGcalCfg({ clientId, keyword });
-  clearGcalToken(); gcalTokenClient = null; clearHealthToken(); clearFoodToken();
+  clearGcalToken(); clearHealthToken(); clearFoodToken();
   $("#gcalMsg").textContent = "Ajustes guardados.";
 });
 $("#gcalDisconnect").addEventListener("click", () => {
-  clearGcalToken(); gcalTokenClient = null; clearHealthToken(); clearFoodToken();
+  clearGcalToken(); clearHealthToken(); clearFoodToken();
   $("#gcalMsg").textContent = "Desconectado.";
 });
 
@@ -2031,27 +2040,11 @@ function clearHealthToken() { try { sessionStorage.removeItem(healthTokKey()); }
 // onlySteps: pide solo el permiso de pasos (reintento si Google rechaza el conjunto con DISALLOWED_OAUTH_SCOPES).
 async function ensureHealthToken(onlySteps = false) {
   const tok = healthToken();
-  if (!onlySteps && tok && tok.exp > Date.now() + 30000) return tok;
-  const cfg = gcalCfg();
-  if (!cfg.clientId) throw new Error("Configura primero el Client ID en Ajustes → Google.");
-  await loadGIS();
-  return new Promise((resolve, reject) => {
-    const client = google.accounts.oauth2.initTokenClient({
-      client_id: cfg.clientId,
-      scope: onlySteps ? HEALTH_SCOPES.steps : Object.values(HEALTH_SCOPES).join(" "),
-      // Sin mezclar permisos ya concedidos (calendario): la Health API rechaza tokens con scopes ajenos (403 DISALLOWED_OAUTH_SCOPES).
-      include_granted_scopes: false,
-      callback: (resp) => {
-        if (resp.error) return reject(new Error(resp.error === "access_denied" ? "Google denegó el acceso (¿tu cuenta está en usuarios de prueba?)" : resp.error));
-        const has = (s) => google.accounts.oauth2.hasGrantedAllScopes(resp, s);
-        if (!has(HEALTH_SCOPES.steps)) return reject(new Error("Sin permiso para leer los pasos: márcalo al conectar."));
-        const t = { token: resp.access_token, exp: Date.now() + resp.expires_in * 1000, weight: !onlySteps && has(HEALTH_SCOPES.weight), scope: String(resp.scope || "") };
-        try { sessionStorage.setItem(healthTokKey(), JSON.stringify(t)); } catch {}
-        resolve(t);
-      },
-      error_callback: (err) => reject(new Error((err && err.type) || "No se pudo conectar con Google")),
-    });
-    client.requestAccessToken({ prompt: "" });
+  if (!onlySteps && tokenAlive(tok)) return tok;
+  return requestToken(healthTokKey(), onlySteps ? HEALTH_SCOPES.steps : Object.values(HEALTH_SCOPES).join(" "), (resp) => {
+    const has = (s) => google.accounts.oauth2.hasGrantedAllScopes(resp, s);
+    if (!has(HEALTH_SCOPES.steps)) return new Error("Sin permiso para leer los pasos: márcalo al conectar.");
+    return { weight: !onlySteps && has(HEALTH_SCOPES.weight), scope: String(resp.scope || "") };
   });
 }
 async function healthFetch(tok, path, body) {
@@ -2263,26 +2256,9 @@ function foodToken() { try { return JSON.parse(sessionStorage.getItem(foodTokKey
 function clearFoodToken() { try { sessionStorage.removeItem(foodTokKey()); } catch {} }
 async function ensureFoodToken() {
   const tok = foodToken();
-  if (tok && tok.exp > Date.now() + 30000) return tok;
-  const cfg = gcalCfg();
-  if (!cfg.clientId) throw new Error("Configura primero el Client ID en Ajustes → Google.");
-  await loadGIS();
-  return new Promise((resolve, reject) => {
-    const client = google.accounts.oauth2.initTokenClient({
-      client_id: cfg.clientId,
-      scope: FOOD_SCOPE,
-      include_granted_scopes: false, // igual que pasos/peso: sin mezclar permisos ajenos en el token
-      callback: (resp) => {
-        if (resp.error) return reject(new Error(resp.error === "access_denied" ? "Google denegó el acceso (¿tu cuenta está en usuarios de prueba?)" : resp.error));
-        if (!google.accounts.oauth2.hasGrantedAllScopes(resp, FOOD_SCOPE)) return reject(new Error("Sin permiso para añadir comidas: márcalo al conectar."));
-        const t = { token: resp.access_token, exp: Date.now() + resp.expires_in * 1000 };
-        try { sessionStorage.setItem(foodTokKey(), JSON.stringify(t)); } catch {}
-        resolve(t);
-      },
-      error_callback: (err) => reject(new Error((err && err.type) || "No se pudo conectar con Google")),
-    });
-    client.requestAccessToken({ prompt: "" });
-  });
+  if (tokenAlive(tok)) return tok;
+  return requestToken(foodTokKey(), FOOD_SCOPE, (resp) =>
+    google.accounts.oauth2.hasGrantedAllScopes(resp, FOOD_SCOPE) ? {} : new Error("Sin permiso para añadir comidas: márcalo al conectar."));
 }
 const foodDisplayName = (x) => (splitName(x.n).t + (x.m && Math.abs(x.m - 1) > 0.01 ? ` ×${f1(x.m)}` : "")).slice(0, 100);
 // Envía (o reenvía) un día: borra lo enviado antes y crea una entrada por comida. Guarda el avance aunque falle a medias,
@@ -2370,22 +2346,23 @@ function renderFoodSync() {
   const label = keys.length > 1 ? `Enviar ${keys.length} días` : keys[0] !== key ? `Enviar ${foodDayName(keys[0])}` : state === "changed" ? "Actualizar" : "Enviar";
   btn.innerHTML = `${ico("upload")} ${label}`;
 }
+let foodAutoBusy = false; // un solo envío a la vez (el automático o el del botón)
 $("#foodSend").addEventListener("click", async () => {
   if (!foodOn()) return;
   const keys = foodSendKeys();
   if (!keys.length) return;
   const btn = $("#foodSend");
-  btn.disabled = true;
+  if (foodAutoBusy) { toast("Ya se están enviando…"); return; } // el envío automático y el botón no pueden ir a la vez: duplicaría
+  foodAutoBusy = true; btn.disabled = true;
   try {
     toast("Enviando comidas a Google Health…", 10000);
     const n = await sendFoodDays(keys);
     toast(`Google Health: ${n} ${n === 1 ? "comida enviada" : "comidas enviadas"}${keys.length > 1 ? ` (${keys.length} días)` : ""}`);
   } catch (err) {
     toast(err.message || "No se pudieron enviar las comidas", 15000);
-  } finally { btn.disabled = false; renderFoodSync(); }
+  } finally { foodAutoBusy = false; btn.disabled = false; renderFoodSync(); }
 });
 // Al abrir la app o volver a ella: si quedan días terminados por enviar y el token sigue vivo, se envían solos.
-let foodAutoBusy = false;
 async function autoFood() {
   if (!foodOn() || foodAutoBusy) return;
   const tok = foodToken(), keys = foodPendingDays();
@@ -2400,7 +2377,7 @@ async function autoFood() {
 document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") autoFood(); });
 window.addEventListener("online", autoFood);
 
-const APP_VERSION = "v33"; // igual que CACHE en sw.js
+const APP_VERSION = "v34"; // igual que CACHE en sw.js
 $("#appVersion").textContent = "Versión de la app: " + APP_VERSION;
 
 /* arranque */

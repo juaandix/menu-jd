@@ -1,5 +1,5 @@
 // Sube la versión cada vez que cambies archivos para que los móviles descarguen la nueva.
-const CACHE = "menujd-v33";
+const CACHE = "menujd-v34";
 // Fotos de productos: caché aparte que no se borra al cambiar de versión (se bajan una vez, al mostrarse).
 const IMG_CACHE = "menujd-img-v1";
 const ASSETS = [
@@ -9,7 +9,8 @@ const ASSETS = [
 ];
 
 self.addEventListener("install", (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)).then(() => self.skipWaiting()));
+  // cache: "reload" salta la caché HTTP del navegador (GitHub Pages da 10 min): si no, la versión nueva podía guardar archivos viejos.
+  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS.map((u) => new Request(u, { cache: "reload" })))).then(() => self.skipWaiting()));
 });
 
 self.addEventListener("activate", (e) => {
@@ -19,7 +20,8 @@ self.addEventListener("activate", (e) => {
   );
 });
 
-// Red primero (para recibir cambios), caché si no hay conexión.
+// Red primero (para recibir cambios), caché si no hay conexión. "no-cache" pregunta siempre al servidor, para no mezclar
+// un index.html nuevo con un app.js viejo de la caché HTTP. Solo se guardan las respuestas buenas.
 // Las peticiones a otros orígenes (p. ej. Google Calendar) se dejan pasar sin interceptar ni cachear.
 self.addEventListener("fetch", (e) => {
   if (e.request.method !== "GET") return;
@@ -34,10 +36,9 @@ self.addEventListener("fetch", (e) => {
     return;
   }
   e.respondWith(
-    fetch(e.request)
+    fetch(e.request, { cache: "no-cache" })
       .then((res) => {
-        const copy = res.clone();
-        caches.open(CACHE).then((c) => c.put(e.request, copy));
+        if (res.ok) { const copy = res.clone(); caches.open(CACHE).then((c) => c.put(e.request, copy)); }
         return res;
       })
       .catch(() => caches.match(e.request, { ignoreSearch: true }).then((m) => m || caches.match("index.html")))
