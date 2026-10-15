@@ -57,7 +57,6 @@
     <!-- MENÚ -->
     <section id="view-menu" class="view" hidden aria-label="Menú">
       <header class="page-head">
-        <p class="eyebrow">Pesos en cocinado</p>
         <h1>Menú</h1>
         <p class="lead" id="menuLead"></p>
       </header>
@@ -135,14 +134,20 @@
     <!-- RECETAS -->
     <section id="view-recetas" class="view" hidden aria-label="Recetas">
       <header class="page-head">
-        <p class="eyebrow">Para hacer en lote</p>
         <h1>Recetas y notas</h1>
+        <p class="lead">Para hacer en lote, con sus macros por ración.</p>
       </header>
       <div id="recipeList" class="cards"></div>
       <section class="block">
         <h2>Notas</h2>
         <ul id="notes" class="notes"></ul>
       </section>
+    </section>
+    <section id="view-ajustes" class="view" hidden aria-label="Ajustes">
+      <header class="page-head">
+        <h1>Ajustes</h1>
+        <p class="lead">Tus productos y fotos, la copia de seguridad y la conexión con Google.</p>
+      </header>
       <section class="block">
         <h2>Mis productos</h2>
         <p class="muted small">Ingredientes que has dado de alta con sus macros para usarlos al cambiar un plato. Son comunes a todos los perfiles de este móvil.</p>
@@ -193,6 +198,7 @@
     <button data-view="menu"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r="1.2" class="fill"/><circle cx="4.5" cy="12" r="1.2" class="fill"/><circle cx="4.5" cy="18" r="1.2" class="fill"/></svg>Menú</button>
     <button data-view="semana"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 20.5h17"/><rect x="5" y="11" width="3" height="7" rx="1"/><rect x="10.5" y="6" width="3" height="12" rx="1"/><rect x="16" y="9" width="3" height="9" rx="1"/></svg>Semana</button>
     <button data-view="recetas"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4.5A1.5 1.5 0 0 1 6.5 3H19v15H6.5A1.5 1.5 0 0 0 5 19.5z"/><path d="M5 19.5A1.5 1.5 0 0 0 6.5 21H19v-3"/><path d="M9 7.5h6M9 11h4"/></svg>Recetas</button>
+    <button data-view="ajustes"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2.2"/><circle cx="9" cy="17" r="2.2"/></svg>Ajustes</button>
   </nav>
 
   <!-- Hoja para añadir -->

@@ -8,7 +8,7 @@
   --bg:#0a1322; --bg-elev:#0e1a2d; --field:#0b1628;
   --surface:#111e34; --surface-2:#16263f; --surface-3:#1c3050;
   --line:rgba(160,185,230,.10); --line-2:rgba(160,185,230,.18);
-  --fg:#ecf1fa; --muted:#93a4c3; --faint:#62759a;
+  --fg:#ecf1fa; --muted:#93a4c3; --faint:#7a8db2;
   --accent:#7ea6ff; --accent-strong:#3f7cf2; --accent-fg:#ffffff; --accent-soft:rgba(126,166,255,.13);
   --warm:#ff8f6b; --warm-soft:rgba(255,143,107,.12); --ok:#4cd6a0;
   --m-p:#7ea6ff; --m-c:#f4bd5a; --m-f:#ef7fb0;
@@ -28,7 +28,7 @@
   --bg:#150a20; --bg-elev:#1b0f29; --field:#170c24;
   --surface:#1f1230; --surface-2:#28183e; --surface-3:#321f4c;
   --line:rgba(214,180,245,.10); --line-2:rgba(214,180,245,.18);
-  --fg:#f6eefc; --muted:#bca4d2; --faint:#8a719f;
+  --fg:#f6eefc; --muted:#bca4d2; --faint:#9c84b1;
   --accent:#c6a0f7; --accent-strong:#9457e0; --accent-fg:#ffffff; --accent-soft:rgba(198,160,247,.14);
   --m-p:#c6a0f7; --m-c:#f4bd5a; --m-f:#6fd3e0;
   --track:rgba(214,180,245,.12);
@@ -168,7 +168,7 @@ input[type=search]{-webkit-appearance:none;appearance:none;padding-left:38px;
 .suggest p b{color:var(--fg)}
 
 /* ---------- pasos ---------- */
-.steps-row{display:grid;gap:4px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);padding:10px 12px 10px 16px}
+.steps-row{display:grid;gap:4px;padding:2px 4px 0}
 .steps-row p{margin:0}
 .steps-row p:empty{display:none}
 .steps-line{display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:center}
@@ -182,10 +182,10 @@ input[type=search]{-webkit-appearance:none;appearance:none;padding-left:38px;
 
 /* ---------- franjas de Hoy ---------- */
 .slots{display:grid;gap:10px}
-.slot{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);padding:14px 14px 12px 16px;display:grid;gap:6px}
+.slot{border-top:1px solid var(--line-2);padding:16px 4px 6px;display:grid;gap:6px}
 .slot.is-empty{padding-block:12px}
 .slot-head{display:flex;align-items:center;justify-content:space-between;gap:10px}
-.slot-head h3{font-size:1rem}
+.slot-head h3{font-size:1.05rem}
 .slot-head small{color:var(--muted);font-size:.76rem;display:block;font-weight:450;margin-top:1px}
 .slot-head small b{color:var(--fg);font-weight:600}
 .entry{display:grid;grid-template-columns:1fr auto auto;align-items:center;gap:8px;border-top:1px solid var(--line)}
@@ -404,7 +404,7 @@ input[type=search]{-webkit-appearance:none;appearance:none;padding-left:38px;
 .price-in small{color:var(--muted);width:34px;font-size:.74rem}
 
 /* ---------- barra inferior ---------- */
-.tabbar{position:fixed;left:0;right:0;bottom:0;z-index:20;display:grid;grid-template-columns:repeat(4,1fr);
+.tabbar{position:fixed;left:0;right:0;bottom:0;z-index:20;display:grid;grid-template-columns:repeat(5,1fr);
   background:var(--tabbar-bg);-webkit-backdrop-filter:saturate(170%) blur(20px);backdrop-filter:saturate(170%) blur(20px);
   border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom,0px)}
 .tabbar button{position:relative;height:var(--tabbar-h);border:0;background:none;color:var(--faint);font-size:.7rem;font-weight:600;display:grid;place-content:center;gap:3px;cursor:pointer;letter-spacing:.01em}
@@ -477,3 +477,25 @@ input[type=search]{-webkit-appearance:none;appearance:none;padding-left:38px;
 /* Revisión con las Web Interface Guidelines de Vercel */
 button,a,label,input,select,summary{touch-action:manipulation}
 .products-pane .opt{content-visibility:auto;contain-intrinsic-size:auto 60px}
+
+/* ---------- Rediseño P1 (Impeccable: layout + distill) ----------
+   Hoy: el resumen es la única tarjeta; pasos y sincronización son una franja de estado; las comidas, una lista.
+   Menú: cada plato es una fila que se despliega (detalles y acciones al abrirla). */
+.slots{gap:0;margin-top:6px}
+.slot.is-empty{padding-block:14px 12px}
+.slot .entry:first-of-type{border-top:0}
+.dish-list{display:grid;border-top:1px solid var(--line-2)}
+.dish{border-bottom:1px solid var(--line)}
+.dish > summary{list-style:none;display:grid;grid-template-columns:auto 1fr auto 16px;gap:12px;align-items:center;min-height:56px;padding:8px 4px;cursor:pointer}
+.dish > summary::-webkit-details-marker{display:none}
+.dish > summary::after{content:"";width:8px;height:8px;border-right:1.6px solid var(--faint);border-bottom:1.6px solid var(--faint);transform:rotate(45deg) translate(-2px,-2px);transition:transform .2s cubic-bezier(.2,.8,.2,1);justify-self:center}
+.dish[open] > summary::after{transform:rotate(-135deg) translate(-2px,-2px)}
+.dish-name{min-width:0;font-weight:560;font-size:.95rem;overflow-wrap:anywhere}
+.dish-name small{display:block;font-weight:450;font-size:.75rem;margin-top:2px}
+.dish .kc{font-size:.78rem;color:var(--muted);text-align:right;line-height:1.35}
+.dish .kc b{color:var(--fg);font-weight:650;font-size:.92rem}
+.dish-body{display:grid;gap:10px;padding:0 4px 16px}
+.dish-body ul{margin:0;padding-left:18px;font-size:.9rem;color:#cfd9ea;display:grid;gap:2px}
+:root[data-profile="cristina"] .dish-body ul{color:#e3d6ef}
+.dish-body li::marker{color:var(--faint)}
+.dish-body .macros{border-top:0;padding-top:0}

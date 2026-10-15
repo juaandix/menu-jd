@@ -7,3 +7,4 @@ Receipt-*.pdf
 .claude/
 IMG_*.PNG
 .playwright-cli/
+.impeccable/

@@ -725,12 +725,16 @@ function itemDishCost(x) {
 
 /* ---------- MENÚ ---------- */
 function cardHTML(o, addable = true) {
-  return `<article class="card"><h3><span class="code">${o.id}</span><span>${nameHTML(o.n)}</span>${o.mod ? `<span class="mod-tag">modificado</span>` : ""}</h3>
+  const miss = addable ? dishMissing(o) : [];
+  return `<details class="dish"><summary><span class="code">${o.id}</span>
+      <span class="dish-name">${nameHTML(o.n)}${o.mod ? ` <span class="mod-tag">modificado</span>` : ""}${miss.length ? `<small class="miss-mark">${ico("alert")} falta ${esc(missNames(miss))}</small>` : ""}</span>
+      <span class="kc"><b>${o.k}</b> kcal<br>${r0(o.p)} g P</span></summary>
+    <div class="dish-body">
     <ul>${o.i.map((x) => `<li>${x}</li>`).join("")}</ul>
     ${o.t ? `<p class="tip">${o.t}</p>` : ""}
-    ${addable && dishMissing(o).length ? `<p class="miss-note"><span>${ico("alert")} Te falta: ${esc(missNames(dishMissing(o)))}</span><button class="add-btn" data-fix="${o.id}">Sustituir</button></p>` : ""}
-    <div class="macros"><span><b>${o.k}</b> kcal</span><span>P <b>${r0(o.p)}</b></span><span>C ${r0(o.c)}</span><span>G ${r0(o.f)}</span>${costLabel(dishCost(o)) ? `<span class="cost">${costLabel(dishCost(o))}</span>` : ""}
-    ${addable ? `<span class="card-btns"><button class="add-btn edit-btn" data-edit="${o.id}" aria-label="Cambiar ingredientes de ${esc(o.n)}">${ico("edit")} Cambiar</button><button class="add-btn" data-quick="${o.id}">+ Hoy</button></span>` : ""}</div></article>`;
+    ${miss.length ? `<p class="miss-note"><span>${ico("alert")} Te falta: ${esc(missNames(miss))}</span><button class="add-btn" data-fix="${o.id}">Sustituir</button></p>` : ""}
+    <div class="macros"><span>P <b>${r0(o.p)}</b></span><span>C ${r0(o.c)}</span><span>G ${r0(o.f)}</span>${costLabel(dishCost(o)) ? `<span class="cost">${costLabel(dishCost(o))}</span>` : ""}
+    ${addable ? `<span class="card-btns"><button class="add-btn edit-btn" data-edit="${o.id}" aria-label="Cambiar ingredientes de ${esc(o.n)}">${ico("edit")} Cambiar</button><button class="add-btn" data-quick="${o.id}">+ Hoy</button></span>` : ""}</div></div></details>`;
 }
 let avgS = {};
 function renderPantry() {
@@ -807,11 +811,11 @@ $("#prodSearch").addEventListener("input", renderProductsPane);
 function renderMenuList() {
   $("#menuList").innerHTML = profile.slots.map((s) => `
     <section class="group"><h2>${s.label}s<small>${s.hint}</small></h2>
-    <div class="cards">${profile.menu[s.id].map((o) => cardHTML(o)).join("")}</div></section>`).join("");
+    <div class="dish-list">${profile.menu[s.id].map((o) => cardHTML(o)).join("")}</div></section>`).join("");
 }
 function renderMenu() {
   $("#menuLead").textContent = profile.builder
-    ? "Cualquier combinación de desayuno, comida y cena da aproximadamente lo mismo. Los snacks ajustan al objetivo del día."
+    ? "Pesos en cocinado. Cualquier combinación de desayuno, comida y cena da aproximadamente lo mismo; los snacks ajustan al objetivo del día."
     : "Plan de referencia: cada tarjeta es uno de los platos de tu plan, con sus kcal, proteína, carbohidratos y grasa.";
   renderPantry(); renderMenuList();
   if (menuTab === "productos") renderProductsPane();
@@ -1504,7 +1508,7 @@ function show(view) {
   if (view === "hoy") renderHoy();
   if (view === "menu") { renderMenuList(); updApplyLabel(); }
   if (view === "semana") renderSemana();
-  if (view === "recetas") renderProducts();
+  if (view === "ajustes") { renderProducts(); renderPhotoList(); }
   window.scrollTo(0, 0);
 }
 let toastT;
@@ -1732,7 +1736,7 @@ async function ensureGcalToken() {
   const tok = gcalToken();
   if (tok && tok.exp > Date.now() + 30000) return tok.token;
   const cfg = gcalCfg();
-  if (!cfg.clientId) throw new Error("Configura primero el Client ID en Recetas → Calendario.");
+  if (!cfg.clientId) throw new Error("Configura primero el Client ID en Ajustes → Google.");
   await loadGIS();
   return new Promise((resolve, reject) => {
     gcalTokenClient = google.accounts.oauth2.initTokenClient({
@@ -1810,7 +1814,7 @@ async function ensureHealthToken(onlySteps = false) {
   const tok = healthToken();
   if (!onlySteps && tok && tok.exp > Date.now() + 30000) return tok;
   const cfg = gcalCfg();
-  if (!cfg.clientId) throw new Error("Configura primero el Client ID en Recetas → Google.");
+  if (!cfg.clientId) throw new Error("Configura primero el Client ID en Ajustes → Google.");
   await loadGIS();
   return new Promise((resolve, reject) => {
     const client = google.accounts.oauth2.initTokenClient({
@@ -2042,7 +2046,7 @@ async function ensureFoodToken() {
   const tok = foodToken();
   if (tok && tok.exp > Date.now() + 30000) return tok;
   const cfg = gcalCfg();
-  if (!cfg.clientId) throw new Error("Configura primero el Client ID en Recetas → Google.");
+  if (!cfg.clientId) throw new Error("Configura primero el Client ID en Ajustes → Google.");
   await loadGIS();
   return new Promise((resolve, reject) => {
     const client = google.accounts.oauth2.initTokenClient({
@@ -2177,7 +2181,7 @@ async function autoFood() {
 document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") autoFood(); });
 window.addEventListener("online", autoFood);
 
-const APP_VERSION = "v25"; // igual que CACHE en sw.js
+const APP_VERSION = "v26"; // igual que CACHE en sw.js
 $("#appVersion").textContent = "Versión de la app: " + APP_VERSION;
 
 /* arranque */
