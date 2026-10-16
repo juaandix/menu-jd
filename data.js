@@ -7,6 +7,8 @@
 //   food: además, enviar las comidas registradas a Google Health (un envío por día).
 // weight: kg de referencia (cálculo de pasos si no hay pesos registrados); weightGoal opcional (línea en la gráfica).
 // slots[].target opcional {k, p | pMin/pMax}: franja del intercambio (±15 kcal, ±3 g P); el editor de platos avisa si se sale.
+// slots[].gymOnly opcional: la franja solo sale en Hoy los días cuyo tipo tiene gym: true (o si ya tiene algo registrado).
+// quick opcional { franja: [clave de SHOP o "clave|1" cocinado] }: productos para añadir con un toque en cada franja de Hoy.
 // dayTypes[].steps opcional: pasos que ya incluye ese objetivo de kcal; si se registran pasos reales, se ajusta.
 
 const PROFILES = {
@@ -25,10 +27,14 @@ const PROFILES = {
     calendar: { enabled: true, clientId: "711298594223-tvim0nptilom1d33c7vm4mh7n7l9tgkr.apps.googleusercontent.com" },
     // pasos y peso desde Google Health (Fitbit), con el mismo Client ID que el calendario; food: enviar las comidas del día
     health: { enabled: true, food: true },
+    // Productos que salen en cada franja de Hoy para añadirlos con un toque: clave de SHOP ("|1" = la versión cocinada).
+    // Lo que más registras va delante.
+    quick: { D: ["muffin", "cafeleche"], C: ["pasta|1", "arroz|1", "picada|1", "picadamixta|1"], S: ["postre", "muffin", "tarta"], N: ["griego"],
+      P: ["platano", "cafe", "tortitas"] },
     dayTypes: [
-      { id: "trabajo-gym", label: "Trabajo + gym", kcal: 2500, mods: 3, steps: 15000 },
+      { id: "trabajo-gym", label: "Trabajo + gym", gym: true, kcal: 2500, mods: 3, steps: 15000 },
       { id: "trabajo", label: "Trabajo sin gym", kcal: 2325, mods: 2, steps: 15000 },
-      { id: "libre-gym", label: "Libre + gym", kcal: 2400, mods: 3 },
+      { id: "libre-gym", label: "Libre + gym", gym: true, kcal: 2400, mods: 3 },
       { id: "libre", label: "Libre sin gym", kcal: 2300, mods: 2 },
     ],
     slots: [
@@ -36,6 +42,8 @@ const PROFILES = {
       { id: "C", label: "Comida", hint: "~750 kcal · ~55 g P", target: { k: 750, p: 55 } },
       { id: "N", label: "Cena", hint: "~750 kcal · ~55 g P", target: { k: 750, p: 55 } },
       { id: "S", label: "Snack", hint: "~155 kcal · 13–21 g P", target: { k: 155, pMin: 13, pMax: 21 } },
+      // Solo sale en Hoy los días con gym (tipo de día con gym: true) o si ya tiene algo. Sin platos: productos sueltos.
+      { id: "P", label: "Preentreno", hint: "Antes de entrenar", gymOnly: true },
     ],
     menu: {
       D: [
@@ -61,6 +69,7 @@ const PROFILES = {
         { id: "N4", n: "Wraps de pollo", i: ["2 maxi tortillas", "120 g pollo cocido", "40 g mozzarella+gouda", "50 g tomate", "5 g aceite"], k: 739, p: 56, c: 62.7, f: 27.2 },
         { id: "N5", n: "Merluza con arroz", i: ["300 g merluza", "340 g arroz cocido", "10 g aceite"], k: 748, p: 57.2, c: 96.9, f: 13.7 },
       ],
+      P: [], // Preentreno: sin platos fijos, se registran productos sueltos
       S: [
         { id: "S1", n: "Muffin con batido", i: ["1 muffin de avena y cottage", "100 g queso batido 0%"], k: 157, p: 17.5, c: 13, f: 4 },
         { id: "S2", n: "Griego con batido", i: ["1 griego ligero (125 g)", "100 g queso batido 0%", "5 g miel", "40 g arándanos"], k: 159, p: 15.5, c: 19.4, f: 2.8 },
@@ -231,9 +240,10 @@ const SHOP = [
   { key: "aceite", r: "grasa", n: "Aceite de oliva", u: "ml", dens: 0.92, re: /aceite|aove/, cat: "Despensa", nut: [900, 0, 0, 100], w: "aceite de oliva" },
   { key: "clear", r: "polvo", n: "Clear Whey", u: "g", re: /clear whey/, cat: "Despensa", nut: [352, 80, 6, 0], w: "Clear Whey" },
   { key: "whey", r: "polvo", n: "Proteína en polvo (whey)", u: "g", g: 30, re: /scoop|whey|de proteina$/, cat: "Despensa", nut: [377, 72, 9.1, 5.8], w: "proteína whey" },
-  // Bebidas (valores típicos de tablas, por 100 ml). Van antes que "leche" para que "café con leche" no caiga en la leche.
-  { key: "cafeleche", r: "bebida", n: "Café con leche (taza)", u: "ud", g: 200, re: /cafe con leche|cortado|capuchino|cappuccino|latte/, cat: "Bebidas", nut: [24, 1.7, 2.4, 0.8], w: "café con leche" },
-  { key: "cafe", r: "bebida", n: "Café solo / americano (taza)", u: "ud", g: 200, re: /\bcafe\b|americano|expreso|espresso/, cat: "Bebidas", nut: [1, 0.1, 0, 0], w: "café americano" },
+  // Bebidas (valores típicos de tablas, por 100 ml), todas en ml. En los cafés, g = una taza (200 ml) para "1 café con leche".
+  // Van antes que "leche" para que "café con leche" no caiga en la leche.
+  { key: "cafeleche", r: "bebida", n: "Café con leche", u: "ml", g: 200, re: /cafe con leche|cortado|capuchino|cappuccino|latte/, cat: "Bebidas", nut: [24, 1.7, 2.4, 0.8], w: "café con leche" },
+  { key: "cafe", r: "bebida", n: "Café solo / americano", u: "ml", g: 200, re: /\bcafe\b|americano|expreso|espresso/, cat: "Bebidas", nut: [1, 0.1, 0, 0], w: "café americano" },
   { key: "refresco", r: "bebida", n: "Refresco zero / té soluble", u: "ml", re: /refresco|coca.?cola|cola zero/, cat: "Bebidas", nut: [1, 0, 0.1, 0], w: "refresco zero" },
   { key: "cervezasin", r: "bebida", n: "Cerveza sin alcohol", u: "ml", re: /(cerveza|cana)s? (sin alcohol|0[,.]0)|sin alcohol/, cat: "Bebidas", nut: [20, 0.3, 4.5, 0], w: "cerveza sin alcohol" },
   { key: "cerveza", r: "bebida", n: "Cerveza", u: "ml", re: /cerveza|\bcanas?\b/, cat: "Bebidas", nut: [43, 0.5, 3.6, 0], w: "cerveza" },

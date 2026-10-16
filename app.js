@@ -125,6 +125,11 @@ function macroBar(label, key, val, target) {
   return `<div class="mbar m-${key}"><div class="mbar-l"><span><i class="dot"></i>${label}</span><span>${right}</span></div>
     ${target ? `<div class="seg seg-m" style="--v:${(pct / 100).toFixed(3)}"><i></i></div>${val < target ? `<small>faltan ${r0(target - val)} g</small>` : `<small class="ok">${ico("check")} objetivo cubierto</small>`}` : ""}</div>`;
 }
+// Franjas que se ven un día: las de solo gym (Preentreno), si el tipo de día es de gym o ya tienen algo.
+function daySlots(day) {
+  const type = profile.dayTypes.find((t) => t.id === day.type) || profile.dayTypes[0];
+  return profile.slots.filter((s) => !s.gymOnly || type.gym || day.items.some((x) => x.slot === s.id));
+}
 function renderHoy() {
   const key = iso(current);
   const day = db[key] || getDay(key);
@@ -154,7 +159,7 @@ function renderHoy() {
     ${suggestHTML(day, key, left, pLeft)}`;
   renderSteps(day, type, key, adj);
 
-  $("#slots").innerHTML = profile.slots.map((s) => {
+  $("#slots").innerHTML = daySlots(day).map((s) => {
     const items = day.items.map((x, idx) => ({ ...x, idx })).filter((x) => x.slot === s.id);
     const hint = s.id === "S" && type.mods ? `${s.hint} · ${type.mods} hoy` : s.hint;
     const st = totals(items);
@@ -167,6 +172,7 @@ function renderHoy() {
           <span class="kc">${r0(x.k)}</span>
           <button class="del" data-del="${x.idx}" aria-label="Quitar ${esc(x.n)}">${ico("x")}</button></div>`).join("")}</div>`
       : fav ? `<button class="chip-opt fav" data-fav="${fav.o.id}|${fav.m}"><span>${ico("plus")} ${fav.last ? "Repetir" : "Lo de siempre"}: ${esc(splitName(withPortion(fav.o.n, fav.m)).t)}</span><small>${r0(fav.o.k * fav.m)} kcal</small></button>` : ""}
+      ${quickHTML(s.id, key)}
     </section>`;
   }).join("");
 }
@@ -190,6 +196,40 @@ function favorite(slotId, key) {
   if (!pick) return null;
   const [ref, m] = pick.split("|");
   return { o: byId(ref), m: +m, last: pick !== (best && best[1] >= 3 && best[0]) };
+}
+// Productos para añadir con un toque en cada franja: los sueltos que más registras ahí (30 días, con la cantidad de la
+// última vez) y los de profile.quick; tantos como fijos tenga la franja (mínimo 3). Sin nada de "Me falta".
+// Cantidad por defecto: la ración de partida de "Con lo que tengo" (startGrams) o una lata.
+const CAN_ML = ["refresco"]; // por defecto, una lata
+const QUICK_SKIP = ["cerveza", "cervezasin"]; // nunca se proponen, aunque se hayan registrado
+function quickProducts(slotId, key) {
+  const from = iso(new Date(new Date(key + "T12:00:00").getTime() - 30 * 864e5)), miss = new Set(loadMissing());
+  const seen = new Map();
+  for (const k of Object.keys(db).sort()) {
+    if (k >= key || k < from) continue;
+    for (const x of db[k].items || []) {
+      if (x.slot !== slotId || x.ref || !x.i || x.i.length !== 1) continue;
+      const p = parseIng(x.i[0]);
+      if (!p.c || !p.nut || p.grams == null) continue;
+      const id = `${p.c.key}|${p.cooked ? 1 : 0}`, prev = seen.get(id);
+      seen.set(id, { id, n: (prev ? prev.n : 0) + 1, amt: p.c.u === "ml" ? p.grams / (p.c.dens || 1) : p.grams });
+    }
+  }
+  const out = [...seen.values()].sort((a, b) => b.n - a.n);
+  const fixed = ((profile.quick && profile.quick[slotId]) || []).map((k) => (k.includes("|") ? k : k + "|0"));
+  for (const id of fixed) if (!seen.has(id)) out.push({ id });
+  const opts = foodOptions();
+  return out.map((q) => ({ ...q, o: opts.find((o) => o.id === q.id) })).filter((q) => q.o && !miss.has(q.o.c.key) && !QUICK_SKIP.includes(q.o.c.key)).slice(0, Math.max(3, fixed.length))
+    .map((q) => ({ o: q.o, amt: q.amt || (CAN_ML.includes(q.o.c.key) ? 330 : startGrams(q.o)) }));
+}
+function quickHTML(slotId, key) {
+  const list = quickProducts(slotId, key);
+  if (!list.length) return "";
+  return `<div class="quick-row">${list.map(({ o, amt }) => {
+    const u = o.c.u === "ml" ? "ml" : "g", gr = amt * (u === "ml" ? o.c.dens || 1 : 1);
+    const qty = o.c.g && o.c.u === "ud" ? `${f1(amt / o.c.g)} ud` : `${fmtG(amt)} ${u}`;
+    return `<button type="button" class="quick-chip" data-quick-food="${o.id}|${amt}|${slotId}" aria-label="Añadir ${esc(o.label)}, ${qty}">${thumbHTML(o.c)}<span><b>${esc(o.label)}</b><small>${qty} · ${r0((o.nut[0] * gr) / 100)} kcal</small></span>${ico("plus")}</button>`;
+  }).join("")}</div>`;
 }
 // Si falta proteína y quedan kcal: los platos que mejor la cubren sin pasarse (hoy desde las 15 h, o días futuros al planificar).
 function proteinSuggest(day, key, left, pLeft) {
@@ -283,7 +323,7 @@ function openEntry(idx) {
       ${multHTML("ent", { k: x.k / mult, p: x.p / mult })}
       <label class="ent-time">Hora<input type="time" id="entTime" value="${x.t || ""}"></label>
       <p class="muted small">Mover a</p>
-      <div class="recent-row">${profile.slots.filter((s) => s.id !== x.slot).map((s) => `<button class="chip-opt" data-ent-move="${s.id}">${s.label}</button>`).join("")}</div>
+      <div class="recent-row">${daySlots(getDay(entState.key)).filter((s) => s.id !== x.slot).map((s) => `<button class="chip-opt" data-ent-move="${s.id}">${s.label}</button>`).join("")}</div>
     </div>
     <div class="row">
       ${canIng ? `<button class="btn ghost" data-ent-ing="1">${ico("edit")} Ingredientes</button>` : ""}
@@ -366,7 +406,7 @@ function showSheetList() {
     <div id="sheetList"></div>
     <div id="foodRow"></div>
     <div class="row add-tools">
-      <button class="btn free-btn" type="button" data-have-pick="1">${ico("spark")} Con lo que tengo</button>
+      ${slotTarget(slot).k != null ? `<button class="btn free-btn" type="button" data-have-pick="1">${ico("spark")} Con lo que tengo</button>` : ""}
       <button class="btn ghost free-btn" type="button" data-ed-free="1">${ico("bowl")} Montar a mano</button>
     </div>
     <details class="add-more"><summary>Otra cosa con tus macros</summary>
@@ -397,7 +437,7 @@ function renderSheetOptions() {
     + (recent.length && !q ? `<div class="recent-label">Recientes</div><div class="recent-row">${recent.map((o) => `<button class="chip-opt" data-pick="${o.id}">${esc(splitName(o.n).t)} <small>${o.k}</small></button>`).join("")}</div>` : "");
   const list = profile.menu[slot].filter((o) => dishMatches(o, q) && !planned.includes(o));
   $("#sheetList").innerHTML = (list.length && (planned.length || recent.length) && !q ? `<div class="recent-label">Todos</div>` : "")
-    + (list.length ? list.map(optHTML).join("") : `<p class="empty">Sin platos que coincidan con "${esc(q)}".</p>`);
+    + (list.length ? list.map(optHTML).join("") : !profile.menu[slot].length ? `<p class="empty">Esta franja no tiene platos: busca un producto arriba (plátano, café, tortitas…).</p>` : `<p class="empty">Sin platos que coincidan con "${esc(q)}".</p>`);
   renderFoodRow(q);
 }
 // Al buscar: tus productos e ingredientes del catálogo que coinciden (se registran por gramos) y, para lo que
@@ -473,7 +513,7 @@ function logFood(optId, g) {
 function unitsHTML(o, target) {
   if (!o.c.g) return "";
   return `<div class="units" data-ug="${o.c.g}" data-target="${target}">
-    <div class="units-top"><span>Unidades <small>1 ≈ ${o.c.g} g</small></span>
+    <div class="units-top"><span>${o.c.u === "ml" ? "Tazas" : "Unidades"} <small>1 ≈ ${o.c.g} ${o.c.u === "ml" ? "ml" : "g"}</small></span>
       <div class="stepper"><button type="button" class="st-btn" data-u-step="-1" aria-label="Una menos">−</button><b class="units-v"></b><button type="button" class="st-btn" data-u-step="1" aria-label="Una más">+</button></div></div>
     <div class="recent-row">${[1, 2, 3, 4, 6].map((n) => `<button type="button" class="chip-opt" data-u-set="${n}">${n}</button>`).join("")}</div></div>`;
 }
@@ -516,7 +556,7 @@ function openFoodGrams(optId) {
     <form id="foodForm" class="portion-card" data-opt="${o.id}">
       ${sheetState.from === "menu" ? `<div class="prod-head">${thumbHTML(o.c)}<p><b>${esc(o.label)}</b><span class="muted small">${r0(o.nut[0])} kcal · ${f1(o.nut[1])} g P por 100 g</span></p></div>
       <p class="muted small">Se añade a <b>${esc(dayLabel(current))}</b> (el día abierto en Hoy).</p>
-      <div class="recent-row slot-pick">${profile.slots.map((s) => `<button type="button" class="chip-opt${s.id === sheetState.slot ? " on" : ""}" data-slot-pick="${s.id}">${esc(s.label)}</button>`).join("")}</div>`
+      <div class="recent-row slot-pick">${daySlots(getDay(iso(current))).map((s) => `<button type="button" class="chip-opt${s.id === sheetState.slot ? " on" : ""}" data-slot-pick="${s.id}">${esc(s.label)}</button>`).join("")}</div>`
         : `<p><b>${esc(o.label)}</b> <span class="muted small">(${r0(o.nut[0])} kcal · ${f1(o.nut[1])} g P por 100 g)</span></p>`}
       ${unitsHTML(o, "ffG")}
       <label for="ffG">${o.c.u === "ml" ? "Mililitros" : "Gramos"}<input type="text" inputmode="decimal" id="ffG" value="${o.c.g || (o.c.u === "ml" ? 200 : 100)}"></label>
@@ -691,7 +731,7 @@ function parseIng(raw) {
   const cooked = !!(c && c.cooked && c.cooked.re.test(t));
   if (c && amount != null) {
     if (c.u === "ud") qty = unit ? (c.g ? amount / c.g : null) : amount;
-    else if (c.u === "ml") qty = unit === "ml" ? amount : unit === "g" ? amount / (c.dens || 1) : null;
+    else if (c.u === "ml") qty = unit === "ml" ? amount : unit === "g" ? amount / (c.dens || 1) : c.g ? (amount * c.g) / (c.dens || 1) : null;
     else qty = unit ? amount : (c.g ? amount * c.g : null);
     if (qty != null && cooked) qty *= c.cooked.f;
     if (unit === "g") grams = amount;
@@ -829,7 +869,7 @@ $("#view-menu").addEventListener("click", (e) => {
 $("#prodSearch").addEventListener("input", renderProductsPane);
 
 function renderMenuList() {
-  $("#menuList").innerHTML = profile.slots.map((s) => `
+  $("#menuList").innerHTML = profile.slots.filter((s) => profile.menu[s.id].length).map((s) => `
     <section class="group"><h2>${s.label}s<small>${s.hint}</small></h2>
     <div class="dish-list">${profile.menu[s.id].map((o) => cardHTML(o)).join("")}</div></section>`).join("");
 }
@@ -1829,6 +1869,11 @@ document.addEventListener("click", (e) => {
     addItem(slotOf(ref), { ref, m: mult, n: withPortion(o.n, mult), ...scaled(o, mult) });
     toast("Añadido: " + withPortion(o.n, mult));
   }
+  else if (b.dataset.quickFood) {
+    const [k, ck, amt, slot] = b.dataset.quickFood.split("|");
+    sheetState = { slot, query: "" };
+    logFood(`${k}|${ck}`, +amt);
+  }
   else if (b.dataset.sugg) { const o = byId(b.dataset.sugg); addItem(slotOf(o.id), { ref: o.id, m: 1, n: o.n, ...scaled(o, 1) }); toast("Añadido: " + o.n); }
   else if (b.id === "copyDay") openCopySheet();
   else if (b.dataset.copyFrom) copyDay(b.dataset.copyFrom);
@@ -2224,8 +2269,8 @@ $("#healthWeek").addEventListener("click", () => {
    si no, el botón se resalta y basta un toque). Las entradas anónimas no se pueden editar: si el día cambia después
    de enviarlo, se borran (batchDelete) y se crean de nuevo. */
 const FOOD_SCOPE = "https://www.googleapis.com/auth/googlehealth.nutrition.writeonly";
-const MEAL_TYPE = { D: "BREAKFAST", C: "LUNCH", S: "SNACK", N: "DINNER" };
-const MEAL_TIME = { D: [8, 0], C: [14, 30], S: [17, 30], N: [21, 0] }; // hora nominal de cada franja, para lo registrado sin hora (x.t)
+const MEAL_TYPE = { D: "BREAKFAST", C: "LUNCH", S: "SNACK", P: "SNACK", N: "DINNER" };
+const MEAL_TIME = { D: [8, 0], C: [14, 30], S: [17, 30], P: [18, 30], N: [21, 0] }; // hora nominal de cada franja, para lo registrado sin hora (x.t)
 const FOOD_PENDING_DAYS = 7; // días cerrados que se revisan para avisar de lo que falta por enviar
 const foodOn = () => !!(profile.health && profile.health.food);
 function foodTokKey() { return `menujd.ghealth.food.tok.${profile.id}.v1`; }
@@ -2377,7 +2422,7 @@ async function autoFood() {
 document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") autoFood(); });
 window.addEventListener("online", autoFood);
 
-const APP_VERSION = "v34"; // igual que CACHE en sw.js
+const APP_VERSION = "v35"; // igual que CACHE en sw.js
 $("#appVersion").textContent = "Versión de la app: " + APP_VERSION;
 
 /* arranque */

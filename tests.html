@@ -400,6 +400,53 @@ async function run() {
     }
   }
 
+  t("Bebidas: todas van en ml", () => {
+    const bad = SHOP.filter((c) => c.r === "bebida" && c.u !== "ml").map((c) => c.key);
+    eq(bad.join(","), "", "bebidas que no van en ml");
+    eq(w.parseIng("1 café con leche").qty, 200, "una taza = 200 ml");
+    eq(w.parseIng("150 ml de café con leche").grams, 150);
+  });
+  {
+    const prevProfile = E("profile.id");
+    E("profile = PROFILES.jd; rebuildIndex();");
+    try {
+      t("Hoy: cada franja propone productos para añadir con un toque (los de siempre primero)", () => {
+        const def = E(`quickProducts("D", "2020-03-10").map((q) => q.o.c.key)`);
+        eq(def[0], "muffin", "sin historial salen los del perfil");
+        E(`db["2020-03-08"] = { type: "trabajo", items: [{ slot: "D", n: "Plátano", i: ["120 g de plátano"], m: 1, k: 1, p: 0, c: 0, f: 0 }] };
+           db["2020-03-09"] = { type: "trabajo", items: [{ slot: "D", n: "Plátano", i: ["150 g de plátano"], m: 1, k: 1, p: 0, c: 0, f: 0 }] };`);
+        const q = E(`quickProducts("D", "2020-03-10").map((q) => q.o.c.key + ":" + q.amt)`);
+        eq(q[0], "platano:150", "lo registrado manda, con la cantidad de la última vez"); eq(q.length, 3);
+        eq(E(`quickProducts("D", "2020-03-10").find((q) => q.o.c.key === "cafeleche").amt`), 200, "café: 200 ml");
+        eq(E(`quickProducts("C", "2020-03-10").map((q) => q.o.id + ":" + q.amt).join(",")`), "pasta|1:200,arroz|1:200,picada|1:150,picadamixta|1:150", "comida: pasta, arroz y picadas cocinadas");
+      });
+      t("Hoy: Preentreno solo los días de gym (o si ya tiene algo)", () => {
+        const ids = (type, items = []) => E(`daySlots({ type: "${type}", items: ${JSON.stringify(items)} }).map((s) => s.id).join(",")`);
+        eq(ids("trabajo-gym"), "D,C,N,S,P"); eq(ids("libre-gym"), "D,C,N,S,P");
+        eq(ids("trabajo"), "D,C,N,S", "sin gym no sale");
+        eq(ids("libre", [{ slot: "P" }]), "D,C,N,S,P", "con algo registrado sí sale");
+        eq(E(`quickProducts("P", "2020-03-10").map((q) => q.o.c.key).join(",")`), "platano,cafe,tortitas");
+      });
+      t("Hoy: las cervezas no salen como producto rápido, aunque se hayan registrado", () => {
+        E(`db["2020-03-07"] = { type: "trabajo", items: [{ slot: "N", n: "Cerveza", i: ["330 ml de cerveza sin alcohol"], m: 1, k: 66, p: 1, c: 15, f: 0 }] };`);
+        const keys = E(`["D", "C", "N", "S", "P"].flatMap((sl) => quickProducts(sl, "2020-03-10").map((q) => q.o.c.key))`);
+        eq(keys.filter((k) => /cerveza/.test(k)).length, 0);
+        E(`delete db["2020-03-07"]`);
+      });
+      t("Hoy: tocar un producto rápido lo registra en esa franja", () => {
+        E(`current = new Date("2020-03-11T12:00:00"); renderHoy();`);
+        const b = w.document.querySelector('#slots [data-quick-food^="muffin|0|"][data-quick-food$="|D"]');
+        if (!b) throw new Error("no sale el botón de muffins en Desayuno");
+        b.click();
+        const x = E(`db["2020-03-11"].items[0]`);
+        eq(x.slot, "D"); eq(x.i[0], "76 g de muffins caseros (1 ud)");
+      });
+    } finally {
+      E(`["2020-03-08", "2020-03-09", "2020-03-11"].forEach((k) => delete db[k]); saveAll(db); current = new Date(); current.setHours(12, 0, 0, 0);`);
+      E(`profile = PROFILES.${prevProfile}; rebuildIndex(); renderHoy();`);
+    }
+  }
+
   /* copia de seguridad, escapado de HTML y arreglos de la auditoría */
   {
     const prevProfile = E("profile.id"), keys = ["menujd.log.jd.v1", "menujd.log.cristina.v1", "menujd.profile.v1", "menujd.dishes.cristina.v1",
