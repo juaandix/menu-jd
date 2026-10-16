@@ -25,6 +25,7 @@ const ICONS = {
   spark: '<path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M5.6 18.4l2.8-2.8M15.6 8.4l2.8-2.8"/>',
   upload: '<path d="M12 15V4"/><path d="m7 9 5-5 5 5"/><path d="M5 20h14"/>',
   camera: '<path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/>',
+  barcode: '<path d="M4 8V5h3M20 8V5h-3M4 16v3h3M20 16v3h-3"/><path d="M8 9v6M11 9v6M14 9v6M17 9v6"/>',
 };
 const ico = (name, cls = "") => `<svg class="i${cls ? " " + cls : ""}" viewBox="0 0 24 24" aria-hidden="true">${ICONS[name]}</svg>`;
 function nameHTML(n) { const x = splitName(n); return esc(x.t) + (x.tag ? ` <span class="tag">${esc(x.tag)}</span>` : ""); }
@@ -401,7 +402,7 @@ function showSheetList() {
   const sl = profile.slots.find((x) => x.id === slot), done = totals((getDay(iso(current)).items || []).filter((x) => x.slot === slot));
   $("#sheetBody").innerHTML = `
     <p class="add-ctx"><span>${esc(dayLabel(current).split(" · ")[0])}</span><span>${esc(sl.hint || "")}</span>${done.k ? `<span>llevas <b>${r0(done.k)}</b> kcal · <b>${r0(done.p)}</b> g P</span>` : ""}</p>
-    <input type="search" id="sheetSearch" placeholder="Buscar un plato o ingrediente…" autocomplete="off" value="${esc(sheetState.query)}">
+    <div class="search-row"><input type="search" id="sheetSearch" placeholder="Buscar un plato o ingrediente…" autocomplete="off" value="${esc(sheetState.query)}"><button class="icon-btn scan-btn" type="button" data-scan="1" aria-label="Escanear código de barras" title="Escanear código de barras">${ico("barcode")}</button></div>
     <div id="recentRow"></div>
     <div id="sheetList"></div>
     <div id="foodRow"></div>
@@ -457,14 +458,16 @@ function renderFoodRow(q) {
 }
 const googleUrl = (q) => "https://www.google.com/search?q=" + encodeURIComponent(`${q} macros por 100 g`);
 // Formulario para apuntar lo encontrado en internet: macros por 100 g + gramos comidos → registra y crea el producto.
-function openWebForm(q) {
+// Desde el escáner llega `sc` = { ean, nut?, note }: valores de Open Food Facts (o vacíos) y el código, que se guarda en el producto.
+function openWebForm(q, sc = null) {
   const name = q.trim().replace(/\s+/g, " ");
-  const same = userProducts().find((p) => norm(p.n) === norm(name));
-  const v = (i) => (same ? String(same.nut[i]).replace(".", ",") : "");
+  const same = name ? userProducts().find((p) => norm(p.n) === norm(name)) : null;
+  const v = (i) => (sc && sc.nut ? String(sc.nut[i]).replace(".", ",") : same ? String(same.nut[i]).replace(".", ",") : "");
   $("#sheetBody").innerHTML = `
     <button class="back-link" type="button" data-web-back="1">${ico("back")} Volver a la búsqueda</button>
-    <form id="webForm" class="custom">
-      <a class="btn ghost web-btn" href="${googleUrl(name)}" target="_blank" rel="noopener">${ico("external")} Abrir otra vez en Google</a>
+    <form id="webForm" class="custom"${sc ? ` data-ean="${esc(sc.ean)}"` : ""}>
+      ${sc ? `<p class="muted small">${sc.note}</p>${sc.nut ? "" : `<a class="btn ghost web-btn" href="${googleUrl(name || sc.ean)}" target="_blank" rel="noopener">${ico("external")} Buscar en Google</a>`}`
+        : `<a class="btn ghost web-btn" href="${googleUrl(name)}" target="_blank" rel="noopener">${ico("external")} Abrir otra vez en Google</a>`}
       <label for="wfName">Nombre<input type="text" id="wfName" value="${esc(name)}" required autocomplete="off"></label>
       <p class="muted small">Valores <b>por 100 g</b> (si solo encuentras los de una ración, divide entre sus gramos y multiplica por 100):</p>
       <div class="grid4">
@@ -490,10 +493,102 @@ function saveWebForm() {
   let n = $("#wfName").value.trim().replace(/\s+/g, " "); n = n.charAt(0).toUpperCase() + n.slice(1);
   const k = num("#wfK"), g = num("#wfG");
   if (!n || !$("#wfK").value.trim() || !(g > 0)) { toast("Pon el nombre, las kcal por 100 g y los gramos"); return; }
-  const list = userProducts(), same = list.find((p) => norm(p.n) === norm(n));
-  const prod = { key: same ? same.key : "u" + Date.now().toString(36), n, nut: [k, num("#wfP"), num("#wfC"), num("#wfF")], ...($("#wfR").value ? { r: $("#wfR").value } : {}) };
+  const code = $("#webForm").dataset.ean, list = userProducts();
+  const same = list.find((p) => code && p.ean === code) || list.find((p) => norm(p.n) === norm(n)), ean = code || (same && same.ean);
+  const prod = { key: same ? same.key : "u" + Date.now().toString(36), n, nut: [k, num("#wfP"), num("#wfC"), num("#wfF")], ...($("#wfR").value ? { r: $("#wfR").value } : {}), ...(ean ? { ean } : {}) };
   saveProducts([...list.filter((p) => p.key !== prod.key), prod]);
   logFood(prod.key + "|0", g);
+}
+/* ---------- escanear código de barras ----------
+   Cámara → código EAN → Open Food Facts (base de datos abierta, gratis y sin clave; los datos los sube la gente) →
+   el formulario de Mis productos ya relleno para revisarlo con la etiqueta. El producto guarda `ean`: si se vuelve a
+   escanear, se registra directamente, también sin conexión. Lector: BarcodeDetector del navegador (Chrome Android) o,
+   si no lo hay (iOS Safari), el de lib/barcode (zxing en wasm, ~1 MB), que solo se carga al pulsar el botón. */
+const BARCODE_FORMATS = ["ean_13", "ean_8", "upc_a", "upc_e"];
+let scan = null, detectorP = null; // scan = { stream, timer } mientras la cámara está abierta
+function barcodeDetector() {
+  if (!detectorP) detectorP = (async () => {
+    if ("BarcodeDetector" in window) {
+      try { const ok = await BarcodeDetector.getSupportedFormats(); if (ok.includes("ean_13")) return new BarcodeDetector({ formats: BARCODE_FORMATS.filter((f) => ok.includes(f)) }); } catch {}
+    }
+    await new Promise((res, rej) => { const s = document.createElement("script"); s.src = "lib/barcode/barcode-detector-ponyfill.js"; s.onload = res; s.onerror = () => rej(new Error("lib")); document.head.append(s); });
+    const api = window.BarcodeDetectionAPI;
+    api.prepareZXingModule({ overrides: { locateFile: (path, prefix) => (path.endsWith(".wasm") ? new URL("lib/barcode/" + path, location.href).href : prefix + path) } });
+    return new api.BarcodeDetector({ formats: BARCODE_FORMATS });
+  })().catch((e) => { detectorP = null; throw e; });
+  return detectorP;
+}
+function openScan() {
+  $("#sheetBody").innerHTML = `
+    <button class="back-link" type="button" data-web-back="1">${ico("back")} Volver a la búsqueda</button>
+    <div class="scan-box"><video id="scanVideo" playsinline muted autoplay></video><span class="scan-aim"></span></div>
+    <p class="muted small" id="scanMsg">Abriendo la cámara…</p>
+    <form id="scanForm" class="custom">
+      <label for="scanCode">O escribe el número del código<input type="text" id="scanCode" inputmode="numeric" autocomplete="off" placeholder="p. ej. 8480000123456"></label>
+      <button class="btn ghost" type="submit">Buscar</button>
+    </form>`;
+  startScan();
+}
+async function startScan() {
+  stopScan();
+  const me = (scan = { stream: null, timer: 0 }), msg = (t) => { if (scan === me && $("#scanMsg")) $("#scanMsg").textContent = t; };
+  try {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw new Error("nocam");
+    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment", width: { ideal: 1280 } }, audio: false });
+    if (scan !== me) { stream.getTracks().forEach((t) => t.stop()); return; }
+    me.stream = stream;
+    const v = $("#scanVideo");
+    v.srcObject = stream;
+    await v.play().catch(() => {});
+    const det = await barcodeDetector();
+    msg("Apunta al código de barras del envase.");
+    const tick = async () => {
+      if (scan !== me) return;
+      if (v.readyState >= 2) {
+        try {
+          const hit = (await det.detect(v)).find((x) => /^\d{8,14}$/.test(x.rawValue));
+          if (hit && scan === me) { if (navigator.vibrate) navigator.vibrate(60); lookupBarcode(hit.rawValue); return; }
+        } catch {}
+      }
+      if (scan === me) me.timer = setTimeout(tick, 200);
+    };
+    tick();
+  } catch (e) {
+    msg(e.message === "lib" ? "No se pudo cargar el lector (¿sin conexión?). Escribe el número del código."
+      : e.name === "NotAllowedError" ? "Sin permiso para usar la cámara: actívalo en los ajustes del navegador o escribe el número."
+      : "No se pudo abrir la cámara: escribe el número del código.");
+    if (scan === me) stopScan();
+  }
+}
+function stopScan() {
+  if (!scan) return;
+  clearTimeout(scan.timer);
+  if (scan.stream) scan.stream.getTracks().forEach((t) => t.stop());
+  scan = null;
+}
+async function lookupBarcode(code) {
+  stopScan();
+  const mine = userProducts().find((p) => p.ean === code);
+  if (mine) { openFoodGrams(mine.key + "|0"); return; }
+  $("#sheetBody").innerHTML = `<p class="muted small">Buscando el código ${esc(code)} en Open Food Facts…</p>`;
+  let p = null, offline = false;
+  try {
+    const res = await fetch(`https://world.openfoodfacts.org/api/v2/product/${code}.json?fields=product_name,product_name_es,brands,nutriments`);
+    if (res.ok) p = (await res.json()).product || null;
+    else if (res.status !== 404) offline = true;
+  } catch { offline = true; }
+  if ($("#sheet").hidden) return;
+  const nu = (p && p.nutriments) || {}, val = (k) => (nu[k + "_100g"] == null || nu[k + "_100g"] === "" ? null : +nu[k + "_100g"]);
+  let kcal = val("energy-kcal");
+  if (kcal == null && val("energy") != null) kcal = val("energy") / 4.184; // energy_100g va en kJ
+  const nut = kcal == null ? null : [r1(kcal), r1(val("proteins") || 0), r1(val("carbohydrates") || 0), r1(val("fat") || 0)];
+  const base = p ? (p.product_name_es || p.product_name || "").trim() : "", brand = p && p.brands ? p.brands.split(",")[0].trim() : "";
+  const name = base && brand && !norm(base).includes(norm(brand)) ? `${base} ${brand}` : base || brand;
+  const note = nut ? "Datos de <b>Open Food Facts</b> (los sube la gente): compáralos con la etiqueta antes de guardar."
+    : offline ? "Sin conexión: no se pudo buscar. Copia los valores de la etiqueta (por 100 g)."
+    : p ? "Open Food Facts lo conoce pero sin macros: cópialos de la etiqueta (por 100 g)."
+    : "No está en Open Food Facts: copia los valores de la etiqueta (por 100 g).";
+  openWebForm(name, { ean: code, nut, note });
 }
 // Registra un ingrediente o producto suelto con sus gramos (lleva i para que salga en la compra y en el coste).
 function logFood(optId, g) {
@@ -584,7 +679,7 @@ function openPortionStep(dishId) {
     </div>`;
 }
 function openSheetShell() { $("#sheet").hidden = false; $("#sheetBg").hidden = false; }
-function closeSheet() { $("#sheet").hidden = true; $("#sheetBg").hidden = true; }
+function closeSheet() { stopScan(); $("#sheet").hidden = true; $("#sheetBg").hidden = true; }
 
 /* ---------- fotos de productos ----------
    Catálogo: img/p/<key>.webp (160×160, Wikimedia Commons; autor y licencia en img/p/credits.json). Se descargan al
@@ -1861,7 +1956,8 @@ document.addEventListener("click", (e) => {
     window.open(googleUrl(q), "_blank", "noopener");
     openWebForm(q);
   }
-  else if (b.dataset.webBack) showSheetList();
+  else if (b.dataset.webBack) { stopScan(); showSheetList(); }
+  else if (b.dataset.scan) openScan();
   else if (b.dataset.foodLog) openFoodGrams(b.dataset.foodLog);
   else if (b.dataset.fav) {
     const [ref, m] = b.dataset.fav.split("|"), o = byId(ref), mult = +m;
@@ -1892,6 +1988,11 @@ $("#sheetBody").addEventListener("submit", (e) => {
   e.preventDefault();
   const num = (id) => numES($(id).value) || 0;
   if (e.target.id === "webForm") { saveWebForm(); return; }
+  if (e.target.id === "scanForm") {
+    const code = $("#scanCode").value.replace(/\D/g, "");
+    if (code.length < 8) toast("El código tiene 8 o 13 cifras"); else lookupBarcode(code);
+    return;
+  }
   if (e.target.id === "foodForm") { logFood(e.target.dataset.opt, num("#ffG")); return; }
   if (e.target.id === "prodForm") {
     const n = $("#prName").value.trim().replace(/\s+/g, " ");
@@ -2422,7 +2523,7 @@ async function autoFood() {
 document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") autoFood(); });
 window.addEventListener("online", autoFood);
 
-const APP_VERSION = "v35"; // igual que CACHE en sw.js
+const APP_VERSION = "v36"; // igual que CACHE en sw.js
 $("#appVersion").textContent = "Versión de la app: " + APP_VERSION;
 
 /* arranque */

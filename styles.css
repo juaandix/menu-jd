@@ -578,6 +578,12 @@ button,a,label,input,select,summary{touch-action:manipulation}
 /* ---------- Ajuste de cantidades ---------- */
 .add-tools{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .add-tools .btn{margin-top:0}
+.search-row{display:flex;gap:8px;align-items:stretch}
+.search-row input{flex:1;min-width:0}
+.search-row .scan-btn{width:48px;height:auto;flex:none;border-radius:var(--r-md)}
+.scan-box{position:relative;border-radius:var(--r-lg);overflow:hidden;background:#000;aspect-ratio:4/3}
+.scan-box video{width:100%;height:100%;object-fit:cover;display:block}
+.scan-aim{position:absolute;inset:32% 10%;border:2px solid var(--accent);border-radius:var(--r-sm);box-shadow:0 0 0 999px rgb(0 0 0 / .35);pointer-events:none}
 .fit-box{display:grid;gap:8px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r-md);padding:12px 14px}
 .fit-box p{margin:0;font-size:.86rem;color:var(--muted)}
 .fit-box > p:first-child{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
