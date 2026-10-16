@@ -578,6 +578,8 @@ button,a,label,input,select,summary{touch-action:manipulation}
 /* ---------- Ajuste de cantidades ---------- */
 .add-tools{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .add-tools .btn{margin-top:0}
+.label-btns{display:grid;gap:8px}
+.label-btns .web-btn{margin-top:0;width:100%}
 .ocr-text{white-space:pre-wrap;font-size:.8rem;max-height:200px;overflow:auto;margin:6px 0 0;color:var(--ink-soft)}
 #wfPaste{margin-top:8px;font-family:inherit;resize:vertical}
 .search-row{display:flex;gap:8px;align-items:stretch}

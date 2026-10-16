@@ -468,7 +468,7 @@ function openWebForm(q, sc = null) {
     <form id="webForm" class="custom"${sc ? ` data-ean="${esc(sc.ean)}"` : ""}>
       ${sc ? `<p class="muted small">${sc.note}</p>${sc.nut || !(name || sc.ean) ? "" : `<a class="btn ghost web-btn" href="${googleUrl(name || sc.ean)}" target="_blank" rel="noopener">${ico("external")} Buscar en Google</a>`}`
         : `<a class="btn ghost web-btn" href="${googleUrl(name)}" target="_blank" rel="noopener">${ico("external")} Abrir otra vez en Google</a>`}
-      ${labelPhotoHTML(sc && sc.nut ? "¿No cuadra? Leer la tabla de la etiqueta" : "Rellenar con una foto de la tabla")}
+      ${labelPhotoHTML(sc && sc.nut ? "¿No cuadra? Foto o captura de la tabla" : "Foto o captura de la tabla")}
       <div class="muted small" id="wfOcr" aria-live="polite"></div>
       <details class="add-more"><summary>O pega el texto de la etiqueta</summary>
         <textarea id="wfPaste" rows="4" placeholder="En el iPhone: abre la foto, mantén pulsado el texto de la tabla, Copiar, y pégalo aquí."></textarea>
@@ -528,7 +528,7 @@ function openScan() {
     <button class="back-link" type="button" data-web-back="1">${ico("back")} Volver a la búsqueda</button>
     <div class="scan-box"><video id="scanVideo" playsinline muted autoplay></video><span class="scan-aim"></span></div>
     <p class="muted small" id="scanMsg">Abriendo la cámara…</p>
-    ${labelPhotoHTML("Sin código: foto de la tabla nutricional")}
+    ${labelPhotoHTML("Sin código: foto o captura")}
     <form id="scanForm" class="custom">
       <label for="scanCode">O escribe el número del código<input type="text" id="scanCode" inputmode="numeric" autocomplete="off" placeholder="p. ej. 8480000123456"></label>
       <button class="btn ghost" type="submit">Buscar</button>
@@ -603,7 +603,22 @@ async function lookupBarcode(code) {
 function loadScript(src) {
   return new Promise((res, rej) => { const s = document.createElement("script"); s.src = src; s.onload = res; s.onerror = () => rej(new Error("lib")); document.head.append(s); });
 }
-const labelPhotoHTML = (txt) => `<label class="btn ghost web-btn">${ico("camera")} ${txt}<input type="file" accept="image/*" data-label-photo="1" hidden></label>`;
+// Foto o captura de la galería (sin `capture`, para poder elegir una captura de pantalla) + pegar una captura copiada
+// (en el iPhone: tocar la miniatura de la captura → Copiar y eliminar). También vale pegar con el teclado (evento paste).
+const labelPhotoHTML = (txt) => `<div class="label-btns"><label class="btn ghost web-btn">${ico("camera")} ${txt}<input type="file" accept="image/*" data-label-photo="1" hidden></label>
+  <button class="btn ghost web-btn" type="button" data-label-paste="1">${ico("copy")} Pegar captura</button></div>`;
+async function pasteLabelImage() {
+  try {
+    if (!navigator.clipboard || !navigator.clipboard.read) throw new Error("api");
+    for (const item of await navigator.clipboard.read()) {
+      const type = item.types.find((t) => t.startsWith("image/"));
+      if (type) { readLabelPhoto(await item.getType(type)); return; }
+    }
+    toast("No hay ninguna imagen copiada: haz la captura y elige Copiar");
+  } catch (e) {
+    toast(e.message === "api" ? "Este navegador no deja pegar imágenes: elige la captura con el otro botón" : "No se pudo pegar la imagen");
+  }
+}
 // Valores por 100 g de un texto de etiqueta: { k, p, c, f } (null lo que no aparece) y `warn` si no cuadran con las kcal.
 function parseLabel(text) {
   const t = norm(text).replace(/(\d)[o]|[o](?=[.,]\d)/g, (m, d) => (d ? d + "0" : "0")), lines = t.split(/\n+/);
@@ -667,11 +682,20 @@ function ocrWorker() {
   return ocrWorkerP;
 }
 // Foto reducida (lado largo ≤ 2000 px) para que el OCR vaya rápido en el móvil.
+// Hasta ~3,5 Mpx: una foto de 12 Mpx se reduce, una captura de pantalla del móvil queda entera (su letra es pequeña).
+// Las capturas en modo oscuro (letra clara sobre fondo oscuro) se invierten: el OCR lee mucho mejor en negro sobre blanco.
 async function ocrImage(file) {
-  const bmp = await createImageBitmap(file), sc = Math.min(1, 2000 / Math.max(bmp.width, bmp.height));
-  const cv = document.createElement("canvas");
+  const bmp = await createImageBitmap(file), sc = Math.min(1, Math.sqrt(3.5e6 / (bmp.width * bmp.height)));
+  const cv = document.createElement("canvas"), ctx = cv.getContext("2d", { willReadFrequently: true });
   cv.width = Math.round(bmp.width * sc); cv.height = Math.round(bmp.height * sc);
-  cv.getContext("2d").drawImage(bmp, 0, 0, cv.width, cv.height);
+  ctx.drawImage(bmp, 0, 0, cv.width, cv.height);
+  const img = ctx.getImageData(0, 0, cv.width, cv.height), d = img.data;
+  let sum = 0;
+  for (let i = 0; i < d.length; i += 16) sum += d[i] * 0.3 + d[i + 1] * 0.59 + d[i + 2] * 0.11;
+  if (sum / (d.length / 16) < 110) {
+    for (let i = 0; i < d.length; i += 4) { d[i] = 255 - d[i]; d[i + 1] = 255 - d[i + 1]; d[i + 2] = 255 - d[i + 2]; }
+    ctx.putImageData(img, 0, 0);
+  }
   return cv;
 }
 async function readLabelPhoto(file) {
@@ -2054,6 +2078,7 @@ document.addEventListener("click", (e) => {
   }
   else if (b.dataset.webBack) { stopScan(); showSheetList(); }
   else if (b.dataset.scan) openScan();
+  else if (b.dataset.labelPaste) pasteLabelImage();
   else if (b.dataset.foodLog) openFoodGrams(b.dataset.foodLog);
   else if (b.dataset.fav) {
     const [ref, m] = b.dataset.fav.split("|"), o = byId(ref), mult = +m;
@@ -2109,6 +2134,12 @@ $("#nextDay").addEventListener("click", () => { current.setDate(current.getDate(
 $("#sheetBody").addEventListener("change", (e) => {
   if (e.target.id === "entTime" && entState) entTime(e.target.value);
   if (e.target.dataset.labelPhoto && e.target.files[0]) readLabelPhoto(e.target.files[0]);
+});
+// Pegar una imagen con el teclado o el menú Pegar mientras está abierto el formulario o el escáner.
+document.addEventListener("paste", (e) => {
+  if ($("#sheet").hidden || !($("#webForm") || $("#scanForm"))) return;
+  const f = [...((e.clipboardData && e.clipboardData.files) || [])].find((x) => x.type.startsWith("image/"));
+  if (f) { e.preventDefault(); readLabelPhoto(f); }
 });
 $("#dayType").addEventListener("change", (e) => { getDay(iso(current)).type = e.target.value; saveAll(db); renderHoy(); });
 $("#stepsIn").addEventListener("change", (e) => {
@@ -2622,7 +2653,7 @@ async function autoFood() {
 document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") autoFood(); });
 window.addEventListener("online", autoFood);
 
-const APP_VERSION = "v37"; // igual que CACHE en sw.js
+const APP_VERSION = "v38"; // igual que CACHE en sw.js
 $("#appVersion").textContent = "Versión de la app: " + APP_VERSION;
 
 /* arranque */
