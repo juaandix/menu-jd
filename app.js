@@ -443,6 +443,7 @@ function renderSheetOptions() {
       <span class="pick-ing">${o.i.map((x) => `<span>${esc(x)}</span>`).join("")}</span>
       ${dishMissing(o).length ? `<small class="miss-mark">${ico("alert")} falta ${esc(missNames(dishMissing(o)))}</small>` : ""}</button>`;
   $("#recentRow").innerHTML = (planned.length ? `<div class="recent-label">Toca hoy en el plan</div><div class="plan-list">${planned.map(optHTML).join("")}</div>` : "")
+    + (myRecipes().length && !q ? `<div class="recent-label">Mis recetas</div><div class="recent-row">${myRecipes().map((p) => `<button class="chip-opt" data-food-log="${p.key}|0">${esc(p.n)} <small>${r0(p.g ? (p.nut[0] * p.g) / 100 : p.nut[0])}${p.g ? "/ración" : "/100 g"}</small></button>`).join("")}</div>` : "")
     + (recent.length && !q ? `<div class="recent-label">Recientes</div><div class="recent-row">${recent.map((o) => `<button class="chip-opt" data-pick="${o.id}">${esc(splitName(o.n).t)} <small>${o.k}</small></button>`).join("")}</div>` : "");
   const list = profile.menu[slot].filter((o) => dishMatches(o, q) && !planned.includes(o));
   $("#sheetList").innerHTML = (list.length && (planned.length || recent.length) && !q ? `<div class="recent-label">Todos</div>` : "")
@@ -727,7 +728,8 @@ function logFood(optId, g) {
   const u = o.c.u === "ml" ? "ml" : "g", gr = g * (u === "ml" ? o.c.dens || 1 : 1);
   const txt = `${fmtG(g)} ${u} de ${w}${unitsText(o, g)}`;
   const m = ingMacros(txt) || { k: (o.nut[0] * gr) / 100, p: (o.nut[1] * gr) / 100, c: (o.nut[2] * gr) / 100, f: (o.nut[3] * gr) / 100 };
-  const n = o.c.g && o.c.u === "ud" ? `${o.label} · ${f1(g / o.c.g)} ud` : `${o.label} (${fmtG(g)} ${u})`;
+  const rac = o.c.rec && o.c.g ? g / o.c.g : 0;
+  const n = o.c.g && o.c.u === "ud" ? `${o.label} · ${f1(g / o.c.g)} ud` : rac ? `${o.label} · ${f1(rac)} ración${rac === 1 ? "" : "es"} (${fmtG(g)} g)` : `${o.label} (${fmtG(g)} ${u})`;
   addItem(sheetState.slot, { n, i: [txt], m: 1, ...scaled(m, 1) });
   afterDishChange(); closeSheet();
   toast(sheetState.from === "menu" ? `Añadido a ${profile.slots.find((s) => s.id === sheetState.slot).label} · ${dayLabel(current).split(" · ")[0]}` : "Añadido: " + n);
@@ -736,7 +738,7 @@ function logFood(optId, g) {
 function unitsHTML(o, target) {
   if (!o.c.g) return "";
   return `<div class="units" data-ug="${o.c.g}" data-target="${target}">
-    <div class="units-top"><span>${o.c.u === "ml" ? "Tazas" : "Unidades"} <small>1 ≈ ${o.c.g} ${o.c.u === "ml" ? "ml" : "g"}</small></span>
+    <div class="units-top"><span>${o.c.u === "ml" ? "Tazas" : o.c.rec ? "Raciones" : "Unidades"} <small>1 ≈ ${o.c.g} ${o.c.u === "ml" ? "ml" : "g"}</small></span>
       <div class="stepper"><button type="button" class="st-btn" data-u-step="-1" aria-label="Una menos">−</button><b class="units-v"></b><button type="button" class="st-btn" data-u-step="1" aria-label="Una más">+</button></div></div>
     <div class="recent-row">${[1, 2, 3, 4, 6].map((n) => `<button type="button" class="chip-opt" data-u-set="${n}">${n}</button>`).join("")}</div></div>`;
 }
@@ -771,7 +773,14 @@ function stepMult(b) {
   if (box.dataset.kind === "ent") go.dataset.entPortion = m; else go.dataset.portion = m;
   go.textContent = `${box.dataset.kind === "ent" ? "Cambiar a" : "Añadir"} ${lab}× · ${r0(box.dataset.k * m)} kcal · ${f1(box.dataset.p * m)} g P`;
 }
-function openFoodGrams(optId) {
+// Seco/crudo o cocinado: lo que tiene las dos versiones (pasta, arroz, carne…) lleva un selector para decir cómo se ha pesado.
+const stateWords = (c) => [roleGroup(c.r) === "hc" ? "En seco" : "En crudo", "Cocinado"];
+function stateHTML(o, kind) {
+  if (!(o.c.nut && o.c.cooked && o.c.cooked.nut)) return "";
+  return `<div class="state-row" role="group" aria-label="¿Cómo lo has pesado?"><span>¿Cómo lo has pesado?</span>${stateWords(o.c).map((l, v) =>
+    `<button type="button" class="chip-opt${+o.cooked === v ? " on" : ""}" aria-pressed="${+o.cooked === v}" data-state="${o.c.key}|${v}" data-state-kind="${kind}">${l} <small>${r0((v ? o.c.cooked.nut : o.c.nut)[0])} kcal/100 g</small></button>`).join("")}</div>`;
+}
+function openFoodGrams(optId, keepG = null) {
   const o = foodOptions().find((x) => x.id === optId);
   if (!o) return;
   $("#sheetBody").innerHTML = `
@@ -781,8 +790,9 @@ function openFoodGrams(optId) {
       <p class="muted small">Se añade a <b>${esc(dayLabel(current))}</b> (el día abierto en Hoy).</p>
       <div class="recent-row slot-pick">${daySlots(getDay(iso(current))).map((s) => `<button type="button" class="chip-opt${s.id === sheetState.slot ? " on" : ""}" data-slot-pick="${s.id}">${esc(s.label)}</button>`).join("")}</div>`
         : `<p><b>${esc(o.label)}</b> <span class="muted small">(${r0(o.nut[0])} kcal · ${f1(o.nut[1])} g P por 100 g)</span></p>`}
+      ${stateHTML(o, "ff")}
       ${unitsHTML(o, "ffG")}
-      <label for="ffG">${o.c.u === "ml" ? "Mililitros" : "Gramos"}<input type="text" inputmode="decimal" id="ffG" value="${o.c.g || (o.c.u === "ml" ? 200 : 100)}"></label>
+      <label for="ffG">${o.c.u === "ml" ? "Mililitros" : "Gramos"}<input type="text" inputmode="decimal" id="ffG" value="${esc(keepG != null ? keepG : o.c.g || (o.c.u === "ml" ? 200 : 100))}"></label>
       <p class="ed-sum" id="ffPrev"></p>
       <button class="btn" type="submit" id="ffGo">${sheetState.from === "menu" ? `Añadir a ${esc(profile.slots.find((s) => s.id === sheetState.slot).label)}` : "Registrar"}</button>
     </form>`;
@@ -913,7 +923,9 @@ const parseCache = new Map();
 function productsKey() { return "menujd.products.v1"; }
 function userProducts() { try { return JSON.parse(localStorage.getItem(productsKey())) || []; } catch { return []; } }
 function saveProducts(list) { try { localStorage.setItem(productsKey(), JSON.stringify(list)); } catch { toast("No se pudo guardar en este dispositivo"); } parseCache.clear(); }
-function productEntry(p) { return { key: p.key, n: p.n, u: "g", g: p.g || null, nut: p.nut, w: p.n, cat: "Mis productos", user: true, r: p.r || "" }; }
+// Las recetas propias (Mis recetas) son productos con `rec: { i, w, rac? }`: sus ingredientes, el peso final cocinado y las raciones.
+// Se escriben "300 g de Lentejas (receta)" para que su nombre no se confunda con un ingrediente ("arroz", "pollo"…).
+function productEntry(p) { return { key: p.key, n: p.n, u: "g", g: p.g || null, nut: p.nut, w: p.rec ? p.n + " (receta)" : p.n, cat: p.rec ? "Mis recetas" : "Mis productos", user: true, r: p.r || "", rec: p.rec || null }; }
 function catalog() { return [...userProducts().map(productEntry), ...SHOP]; }
 // Grupos de alimento (campo r de SHOP) que se pueden elegir para Mis productos.
 const ROLE_LABELS = { prot: "Carne, pescado o huevo", lacteo: "Lácteo", queso: "Queso", polvo: "Proteína en polvo", hc: "Pan, cereal, pasta, arroz o patata",
@@ -937,8 +949,8 @@ const missNames = (list) => [...new Set(list.map((x) => x.c.n))].join(", ");
 function parseIng(raw) {
   if (parseCache.has(raw)) return parseCache.get(raw);
   const t = norm(raw);
-  const own = userProducts().find((p) => t.includes(norm(p.n)));
-  const c = own ? productEntry(own) : SHOP.find((x) => x.re.test(t)) || null;
+  const own = userProducts().map(productEntry).sort((a, b) => !!b.rec - !!a.rec).find((p) => t.includes(norm(p.w)));
+  const c = own || SHOP.find((x) => x.re.test(t)) || null;
   let amount = null, unit = null; // unit: "g" | "ml" | null (= unidades)
   const lead = t.match(new RegExp("^" + QTY + "\\s*(g|ml)?\\b"));
   let parenG = null;
@@ -982,13 +994,23 @@ function itemCost(c, qty) {
   if (pr == null) return null;
   return c.u === "ud" ? qty * pr : (qty / 1000) * pr;
 }
+// Desglosa las recetas propias en sus ingredientes (para la compra y el coste): 300 g de una olla de 1.200 g = ¼ de cada uno.
+function expandIngs(ings, mult = 1, depth = 0) {
+  const out = [];
+  for (const raw of ings) {
+    const p = parseIng(raw);
+    if (p.c && p.c.rec && depth < 3) { if (p.grams != null && p.c.rec.w > 0) out.push(...expandIngs(p.c.rec.i, (mult * p.grams) / p.c.rec.w, depth + 1)); }
+    else out.push([raw, mult]);
+  }
+  return out;
+}
 // Coste de un plato con los precios que haya: { eur, missing } (missing = ingredientes con cantidad pero sin precio).
 function dishCost(o, mult = 1) {
   let eur = 0, missing = 0, priced = 0;
-  for (const raw of o.i) {
+  for (const [raw, k] of expandIngs(o.i, mult)) {
     const { c, qty } = parseIng(raw);
     if (!c || qty == null) continue;
-    const v = itemCost(c, qty * mult);
+    const v = itemCost(c, qty * k);
     if (v == null) missing++; else { eur += v; priced++; }
   }
   return { eur, missing, priced };
@@ -1065,7 +1087,7 @@ function guessSlot() {
 }
 function renderProductsPane() {
   const q = norm(($("#prodSearch").value || "").trim()), opts = foodOptions();
-  const cats = SHOP_CATS.filter((cat) => opts.some((o) => o.c.cat === cat));
+  const cats = ["Mis recetas", ...SHOP_CATS].filter((cat) => opts.some((o) => o.c.cat === cat));
   $("#prodCats").innerHTML = [["", "Todo"], ...cats.map((c) => [c, c])].map(([v, l]) => `<button type="button" class="chip-opt${v === prodCat ? " on" : ""}" data-prod-cat="${esc(v)}">${esc(l)}</button>`).join("");
   const list = opts.filter((o) => (!prodCat || o.c.cat === prodCat) && (!q || norm(o.label).includes(q)));
   $("#prodHint").textContent = `Toca uno para añadirlo a una comida de ${dayLabel(current).split(" · ")[0].toLowerCase()}.`;
@@ -1180,28 +1202,31 @@ function openEntryEditor() {
   showEditor({ mode: "entry", slot: x.slot, n: baseName(x.n), i: [...i], m: per, base: { n: baseName(x.n), i: [...i], ...per }, mult, target: { ...per } }, "Ingredientes · " + baseName(x.n));
 }
 function renderEditor() {
-  const b = ed.base, free = ed.mode === "free";
+  const b = ed.base, free = ed.mode === "free", rec = ed.mode === "rec";
   const changed = ed.i.join("\n") !== b.i.join("\n") || ed.n.trim() !== b.n;
-  const showOrig = !free && (changed || (ed.mode === "dish" && byId(ed.id).mod));
+  const showOrig = !free && !rec && (changed || (ed.mode === "dish" && byId(ed.id).mod));
   const actions = {
     dish: `<button class="btn" data-ed-save="1">Guardar plato</button>${byId(ed.id || "") && byId(ed.id).mod ? `<button class="btn ghost" data-ed-reset="1">Restaurar original</button>` : ""}`,
     log: `<div class="portion-row">${PORTIONS.map((pt) => `<button class="portion-btn${pt.mult === 1 ? " is-default" : ""}" data-ed-log="${pt.mult}"><b>${pt.label}×</b><span>${r0(ed.m.k * pt.mult)} kcal · ${f1(ed.m.p * pt.mult)} g P</span></button>`).join("")}</div>`,
     free: `<button class="btn" data-ed-log="1"${ed.i.length ? "" : " disabled"}>Registrar</button>`,
     entry: `<button class="btn" data-ed-entry="1">Guardar cambios</button>`,
+    rec: `<button class="btn" data-rec-save="1"${ed.i.length ? "" : " disabled"}>Guardar receta</button>${ed.key ? `<button class="btn ghost" data-prod-del="${ed.key}">Borrar receta</button>` : ed.i.length ? `<button class="btn ghost" data-rec-discard="1">Descartar</button>` : ""}`,
   }[ed.mode];
   const note = {
     dish: "El cambio se guarda en este móvil y se usa al registrar, en Monta tu día, la lista de la compra y los costes. Lo ya registrado no cambia.",
     log: "Solo cambia lo que registras ahora; el plato del Menú se queda como está. Elige la ración para registrarlo.",
     free: "Añade los ingredientes con sus gramos y los macros se calculan solos.",
     entry: `Cambia solo esta entrada del registro${ed.mult !== 1 ? ` (ración ${f1(ed.mult)}×; los valores de arriba son por ración)` : ""}.`,
+    rec: "Ve añadiendo lo que echas mientras cocinas: se guarda solo, puedes cerrar y seguir luego desde Recetas.",
   }[ed.mode];
   $("#sheetBody").innerHTML = `
-    <label for="edName">${free ? "Nombre (opcional)" : "Nombre del plato"}<input type="text" id="edName" value="${esc(ed.n)}" placeholder="${free ? "p. ej. Tostadas con pavo" : ""}" autocomplete="off"></label>
+    <label for="edName">${free ? "Nombre (opcional)" : rec ? "Nombre de la receta" : "Nombre del plato"}<input type="text" id="edName" value="${esc(ed.n)}" placeholder="${free ? "p. ej. Tostadas con pavo" : rec ? "p. ej. Lentejas con verduras" : ""}" autocomplete="off"></label>
     <div class="ed-list">${ed.i.length ? ed.i.map((raw, idx) => {
       const m = ingMacros(raw);
       const miss = loadMissing().includes((parseIng(raw).c || {}).key);
-      const lock = ed.locked && ed.locked.has(idx), qty = m && parseIng(raw).grams != null;
-      const nameIn = `<b>${esc(raw)}</b><small>${miss ? "no lo tienes · " : ""}${m ? `${r0(m.k)} kcal · ${f1(m.p)} g P` : "sin macros (no se puede cambiar)"}${lock ? " · cantidad fijada" : qty ? " · toca para cambiar la cantidad" : ""}</small>`;
+      const lock = ed.locked && ed.locked.has(idx), qty = m && parseIng(raw).grams != null, pc = parseIng(raw);
+      const st = pc.c && pc.c.nut && pc.c.cooked && pc.c.cooked.nut ? stateWords(pc.c)[+pc.cooked].toLowerCase() + " · " : "";
+      const nameIn = `<b>${esc(raw)}</b><small>${st}${miss ? "no lo tienes · " : ""}${m ? `${r0(m.k)} kcal · ${f1(m.p)} g P` : "sin macros (no se puede cambiar)"}${lock ? " · cantidad fijada" : qty ? " · toca para cambiar la cantidad" : ""}</small>`;
       return `<div class="ed-row${miss ? " is-miss" : ""}${lock ? " is-lock" : ""}">${qty ? `<button type="button" class="ed-name ed-qty" data-ed-qty="${idx}">${nameIn}</button>` : `<div class="ed-name">${nameIn}</div>`}
         ${m ? `<button class="chip-opt" data-ed-change="${idx}">Cambiar</button><button class="del" data-ed-remove="${idx}" aria-label="Quitar ${esc(raw)}">${ico("x")}</button>` : ""}</div>`;
     }).join("") : `<p class="empty">Aún no hay ingredientes.</p>`}</div>
@@ -1214,13 +1239,30 @@ function renderEditor() {
       ${ed.mode !== "free" ? `<label class="fit-auto"><input type="checkbox" id="edAuto"${autoFitOn() ? " checked" : ""}> Recalcular las cantidades al cambiar ingredientes</label>` : ""}
     </div>` : ""}
     <div class="ed-total">
-      <div><small>${ed.mode === "log" || ed.mode === "entry" ? "Ahora (1 ración)" : "Ahora"}</small><b>${macrosTxt(ed.m)}</b></div>
+      <div><small>${ed.mode === "log" || ed.mode === "entry" ? "Ahora (1 ración)" : rec ? "Toda la receta" : "Ahora"}</small><b>${macrosTxt(ed.m)}</b></div>
       ${showOrig ? `<div><small>Original</small><span>${macrosTxt(b)}</span></div>` : ""}
       ${ed.i.length ? bandStatus(ed.slot, ed.m) : ""}
     </div>
+    ${rec && ed.i.length ? `<div class="rec-final">
+      <div class="grid2">
+        <label for="edW">Peso final cocinado (g)<input type="text" inputmode="decimal" id="edW" value="${esc(ed.w || "")}" placeholder="${fmtG(recRawGrams(ed.i))}"></label>
+        <label for="edRac">Raciones (opcional)<input type="text" inputmode="decimal" id="edRac" value="${esc(ed.rac || "")}" placeholder="p. ej. 4"></label>
+      </div>
+      <p class="muted small">Al terminar, pesa la comida ya hecha (sin la olla): el agua que se evapora o absorbe cambia los macros por 100 g. Si lo dejas vacío se usa la suma de los ingredientes.</p>
+      <p class="ed-sum" id="edPer"></p></div>` : ""}
     <div class="row">${actions}</div>
     <p class="muted small">${note}</p>`;
-  $("#edName").addEventListener("input", (e) => { ed.n = e.target.value; });
+  $("#edName").addEventListener("input", (e) => { ed.n = e.target.value; if (rec) saveRecipeDraft(); });
+  if (rec && ed.i.length) {
+    const per = () => {
+      const w = recWeight(), rac = numES(ed.rac);
+      $("#edPer").innerHTML = w ? `Por 100 g: <b>${macrosTxt(scaled(ed.m, 100 / w))}</b>${rac > 0 ? `<br>Por ración (${fmtG(w / rac)} g): <b>${macrosTxt(scaled(ed.m, 1 / rac))}</b>` : ""}` : "";
+    };
+    $("#edW").addEventListener("input", (e) => { ed.w = e.target.value; per(); saveRecipeDraft(); });
+    $("#edRac").addEventListener("input", (e) => { ed.rac = e.target.value; per(); saveRecipeDraft(); });
+    per();
+  }
+  if (rec) saveRecipeDraft();
   const auto = $("#edAuto"); if (auto) auto.addEventListener("change", (e) => setAutoFit(e.target.checked));
   ed.justFit = false;
 }
@@ -1424,8 +1466,8 @@ function openPicker(idx) {
   ed.idx = idx; ed.q = "";
   const old = idx != null ? ed.i[idx] : null;
   $("#sheetBody").innerHTML = `
-    <button class="back-link" type="button" data-ed-back="1">${ico("back")} Volver al plato</button>
-    ${old ? `<p class="muted small">Cambiar <b>${esc(old)}</b> por…</p>` : `<p class="muted small">Añadir al plato…</p>`}
+    <button class="back-link" type="button" data-ed-back="1">${ico("back")} Volver ${edWhat()}</button>
+    ${old ? `<p class="muted small">Cambiar <b>${esc(old)}</b> por…</p>` : `<p class="muted small">Añadir ${edWhat()}…</p>`}
     <input type="search" id="edSearch" placeholder="Buscar ingrediente…" autocomplete="off">
     <div id="edRecs"></div>
     <div id="edOptions" class="ed-options"></div>
@@ -1463,7 +1505,7 @@ function substitutes(raw, max = 5) {
   const missing = new Set(loadMissing()), mode = defaultFit(o), tolP = proteinMatters(o) ? 3 : 6;
   for (const opt of foodOptions()) {
     if (old.c && opt.c.key === old.c.key) continue;
-    if (!(opt.nut[0] > 0) || missing.has(opt.c.key)) continue;
+    if (!(opt.nut[0] > 0) || missing.has(opt.c.key) || opt.c.rec) continue;
     // Mismo grupo de alimento. Mis productos sin grupo entran siempre, y si lo que se cambia no tiene
     // grupo, vale cualquiera menos las salsas.
     const og = roleGroup(opt.c.r);
@@ -1505,10 +1547,10 @@ function renderPickerOptions() {
 function openQty(idx) {
   const p = parseIng(ed.i[idx]);
   if (!p.c || p.grams == null) return;
-  ed.idx = idx; ed.qtyOnly = true;
+  ed.idx = idx; ed.qtyOnly = true; ed.restate = false;
   openGrams(`${p.c.key}|${p.cooked ? 1 : 0}`);
 }
-function openGrams(optId) {
+function openGrams(optId, keepG = null) {
   const o = foodOptions().find((x) => x.id === optId);
   if (!o) return;
   ed.pick = o;
@@ -1516,12 +1558,13 @@ function openGrams(optId) {
   ed.oldM = ed.idx != null ? ingMacros(ed.i[ed.idx]) : null;
   // Al cambiar un ingrediente se calculan solos los gramos que suplen al anterior (si los dos tienen macros).
   ed.fit = !ed.qtyOnly && ed.oldM && o.nut[0] > 0 ? defaultFit(ed.oldM) : null;
-  ed.grams = ed.fit ? fitGrams(ed.fit) : (old && old.grams) || o.c.g || 100;
+  ed.grams = ed.fit ? fitGrams(ed.fit) : keepG != null ? keepG : (old && old.grams) || o.c.g || 100;
   $("#sheetBody").innerHTML = `
-    ${ed.qtyOnly ? `<button class="back-link" type="button" data-ed-back="1">${ico("back")} Volver al plato</button>`
+    ${ed.qtyOnly ? `<button class="back-link" type="button" data-ed-back="1">${ico("back")} Volver ${edWhat()}</button>`
       : `<button class="back-link" type="button" data-ed-back-pick="1">${ico("back")} Elegir otro ingrediente</button>`}
     <div class="portion-card">
       <p><b>${esc(o.label)}</b> <span class="muted small">(${r0(o.nut[0])} kcal · ${f1(o.nut[1])} g P por 100 g)</span></p>
+      ${stateHTML(o, "ed")}
       ${ed.fit ? `<div class="fit-row" role="group" aria-label="Calcular gramos para igualar">${FIT_MODES.map((f) => `<button class="chip-opt fit-btn" data-ed-fit="${f.id}">${f.label}</button>`).join("")}</div>` : ""}
       ${unitsHTML(o, "edGrams")}
       <label for="edGrams">${gramsLabel(o)}<input type="text" inputmode="decimal" id="edGrams" value="${fmtG(ed.grams)}"></label>
@@ -1563,7 +1606,7 @@ function setFit(mode) {
   $("#edGrams").value = fmtG(g); renderGramsPreview(); syncUnits();
 }
 function pickText() {
-  if (ed.qtyOnly && ed.idx != null) return withGrams(ed.i[ed.idx], ed.grams);
+  if (ed.qtyOnly && ed.idx != null && !ed.restate) return withGrams(ed.i[ed.idx], ed.grams);
   const o = ed.pick, w = o.cooked ? o.c.cooked.w : o.c.w;
   return `${fmtG(ed.grams)} g de ${w}${unitsText(o, ed.grams)}`;
 }
@@ -1585,7 +1628,7 @@ function renderGramsPreview() {
   $("#edPreview").innerHTML = d ? `
     <p class="muted small">Este ingrediente: ${r0(d.newM.k)} kcal · ${f1(d.newM.p)} g P${ed.idx != null ? ` (antes ${r0(d.oldM.k)} kcal · ${f1(d.oldM.p)} g P)` : ""}</p>
     ${ed.idx != null ? fitDiff(d.newM, d.oldM) : ""}
-    <p class="ed-sum">Plato: <b>${macrosTxt(d.total)}</b></p>${bandStatus(ed.slot, d.total)}` : `<p class="empty">Pon los gramos.</p>`;
+    <p class="ed-sum">${ed.mode === "rec" ? "Receta" : "Plato"}: <b>${macrosTxt(d.total)}</b></p>${bandStatus(ed.slot, d.total)}` : `<p class="empty">Pon los gramos.</p>`;
 }
 function applyPick() {
   const d = ed.grams > 0 ? pickDelta() : null;
@@ -1595,7 +1638,7 @@ function applyPick() {
   ed.m = d.total;
   ed.locked = ed.locked || new Set();
   if (ed.qtyOnly) ed.locked.add(ed.idx); else if (ed.idx != null) ed.locked.delete(ed.idx);
-  ed.qtyOnly = false;
+  ed.qtyOnly = false; ed.restate = false;
   afterIngredientChange();
 }
 function saveEditor() {
@@ -1618,12 +1661,74 @@ function afterDishChange() {
 function renderProducts() {
   const list = userProducts();
   $("#productList").innerHTML = list.length
-    ? list.map((p) => `<li class="has-thumb">${thumbHTML(productEntry(p))}<span><b>${esc(p.n)}</b><small>${p.nut[0]} kcal · P ${p.nut[1]} · C ${p.nut[2]} · G ${p.nut[3]} /100 g${p.g ? ` · ${p.g} g/ud` : ""}${p.r && ROLE_LABELS[p.r] ? ` · ${ROLE_LABELS[p.r]}` : ""}</small></span><button class="del" data-prod-del="${p.key}" aria-label="Borrar ${esc(p.n)}">${ico("x")}</button></li>`).join("")
+    ? list.map((p) => `<li class="has-thumb">${thumbHTML(productEntry(p))}<span><b>${esc(p.n)}</b><small>${p.nut[0]} kcal · P ${p.nut[1]} · C ${p.nut[2]} · G ${p.nut[3]} /100 g${p.rec ? ` · receta${p.g ? `, ${p.g} g/ración` : ""}` : `${p.g ? ` · ${p.g} g/ud` : ""}${p.r && ROLE_LABELS[p.r] ? ` · ${ROLE_LABELS[p.r]}` : ""}`}</small></span><button class="del" data-prod-del="${p.key}" aria-label="Borrar ${esc(p.n)}">${ico("x")}</button></li>`).join("")
     : `<li class="empty">Aún no hay ninguno. Se crean desde «Cambiar» en un plato del Menú o buscando en Google desde Añadir.</li>`;
+}
+
+/* ---------- MIS RECETAS: se montan mientras cocinas ----------
+   Cada ingrediente que echas se añade con sus gramos (el mismo editor de platos, modo "rec"); el borrador se guarda
+   en cada cambio (menujd.recipe.draft.v1) para poder cerrar la app y seguir. Al guardar, la receta pasa a Mis productos
+   con sus macros por 100 g del peso final cocinado (y por ración si se indican), así que se registra por gramos o raciones
+   como cualquier producto: buscador, Menú → Productos, productos rápidos… La compra y el coste la desglosan (expandIngs). */
+const RECIPE_DRAFT = "menujd.recipe.draft.v1";
+const myRecipes = () => userProducts().filter((p) => p.rec).sort((a, b) => a.n.localeCompare(b.n, "es"));
+const edWhat = () => (ed && ed.mode === "rec" ? "a la receta" : "al plato");
+function loadRecipeDraft() { try { return JSON.parse(localStorage.getItem(RECIPE_DRAFT)); } catch { return null; } }
+function saveRecipeDraft() {
+  try { localStorage.setItem(RECIPE_DRAFT, JSON.stringify({ key: ed.key || null, n: ed.n, i: ed.i, w: ed.w || "", rac: ed.rac || "" })); } catch {}
+  renderMyRecipes();
+}
+function clearRecipeDraft() { try { localStorage.removeItem(RECIPE_DRAFT); } catch {} }
+const recRawGrams = (ings) => ings.reduce((a, raw) => a + (parseIng(raw).grams || 0), 0);
+const recWeight = () => numES(ed.w) > 0 ? numES(ed.w) : recRawGrams(ed.i);
+const sumIngs = (ings) => ings.reduce((a, raw) => addM(a, ingMacros(raw) || ZERO), { ...ZERO });
+function openRecipeEditor(key = null) {
+  let d = loadRecipeDraft();
+  if (d && (d.key || null) !== key && d.i.length && !confirm(`Tienes a medias «${d.n || "una receta sin nombre"}». ¿Descartarla?`)) key = d.key || null;
+  else if (d && (d.key || null) !== key) d = null;
+  const p = key && userProducts().find((x) => x.key === key);
+  if (!d && p) d = { key, n: p.n, i: [...p.rec.i], w: String(p.rec.w).replace(".", ","), rac: p.rec.rac ? String(p.rec.rac) : "" };
+  d = d || { key: null, n: "", i: [], w: "", rac: "" };
+  showEditor({ mode: "rec", key: d.key, n: d.n, i: [...d.i], w: d.w, rac: d.rac, m: sumIngs(d.i), base: { n: "", i: [], ...ZERO }, target: null, slot: null },
+    d.key ? "Receta · " + d.n : "Nueva receta");
+}
+function saveRecipe() {
+  const n = ed.n.trim().replace(/\s+/g, " "), w = recWeight(), rac = Math.round(numES(ed.rac)) || 0;
+  if (!n) { toast("Ponle un nombre a la receta"); $("#edName").focus(); return; }
+  if (!ed.i.length || !(ed.m.k > 0) || !(w > 0)) { toast("Añade algún ingrediente con sus gramos"); return; }
+  const list = userProducts();
+  if (list.some((x) => x.rec && x.key !== ed.key && norm(x.n) === norm(n))) { toast("Ya tienes una receta con ese nombre"); return; }
+  const prod = { key: ed.key || "r" + Date.now().toString(36), n: n.charAt(0).toUpperCase() + n.slice(1), nut: MK.map((k) => r1((ed.m[k] * 100) / w)), r: "casero",
+    rec: { i: [...ed.i], w: r0(w), ...(rac > 0 ? { rac } : {}) }, ...(rac > 0 ? { g: r0(w / rac) } : {}) };
+  saveProducts([...list.filter((x) => x.key !== prod.key), prod]);
+  clearRecipeDraft(); afterDishChange(); renderRecetas(); closeSheet();
+  toast("Receta guardada: " + prod.n, 6000, { label: "Añadir a una comida", fn: () => openProductSheet(prod.key + "|0") });
+}
+function discardRecipe() {
+  const d = loadRecipeDraft();
+  clearRecipeDraft(); closeSheet(); renderMyRecipes();
+  toast("Receta descartada", 6000, { label: "Deshacer", fn: () => { try { localStorage.setItem(RECIPE_DRAFT, JSON.stringify(d)); } catch {} openRecipeEditor(d.key || null); } });
+}
+function renderMyRecipes() {
+  const d = loadRecipeDraft(), list = myRecipes();
+  const draft = d && d.i.length ? `<article class="card rec-draft"><h3>${ico("bowl")} En curso: ${esc(d.n || "sin nombre")}</h3>
+    <p class="muted small">${d.i.length} ingrediente${d.i.length === 1 ? "" : "s"} · ${r0(sumIngs(d.i).k)} kcal en total</p>
+    <button class="btn" data-rec-open="${d.key || ""}">Seguir con la receta</button></article>` : "";
+  $("#myRecipes").innerHTML = draft + list.map((p) => {
+    const tot = scaled({ k: p.nut[0], p: p.nut[1], c: p.nut[2], f: p.nut[3] }, p.rec.w / 100);
+    return `<article class="card"><h3>${esc(p.n)}</h3>
+    <p class="muted small">${fmtG(p.rec.w)} g cocinado · ${r0(tot.k)} kcal · ${f1(tot.p)} g P en total${p.rec.rac ? ` · ${p.rec.rac} raciones de ${fmtG(p.g)} g` : ""}</p>
+    <details class="rec-ings"><summary>${p.rec.i.length} ingrediente${p.rec.i.length === 1 ? "" : "s"}</summary><ul>${p.rec.i.map((x) => `<li>${esc(x)}</li>`).join("")}</ul></details>
+    <div class="macros"><span><b>${r0(p.nut[0])}</b> kcal/100 g</span><span>P <b>${f1(p.nut[1])}</b></span><span>C ${r0(p.nut[2])}</span><span>G ${r0(p.nut[3])}</span>
+      ${p.g ? `<span>ración <b>${r0((p.nut[0] * p.g) / 100)}</b> kcal</span>` : ""}
+      <span class="card-btns"><button class="add-btn edit-btn" data-rec-open="${p.key}">${ico("edit")} Editar</button><button class="add-btn" data-rec-add="${p.key}">+ Comida</button></span></div></article>`;
+  }).join("");
+  $("#myRecipesEmpty").hidden = !!(draft || list.length);
 }
 
 /* ---------- RECETAS ---------- */
 function renderRecetas() {
+  renderMyRecipes();
   $("#recipeList").innerHTML = profile.recipes.map((x) => `<article class="card"><h3><span class="code">${x.tag}</span>${x.n}</h3>
     <ul>${x.i.map((i) => `<li>${i}</li>`).join("")}</ul><ol>${x.s.map((i) => `<li>${i}</li>`).join("")}</ol>
     <div class="macros"><span>${x.m}</span></div></article>`).join("");
@@ -1871,11 +1976,11 @@ function buildShop(rows) {
     const ings = x.i || (o && o.i);
     if (!ings) continue;
     const mult = x.i ? x.m || 1 : itemMult(x, o);
-    for (const raw of ings) {
+    for (const [raw, k] of expandIngs(ings, mult)) {
       const { c, qty } = parseIng(raw);
       if (!c) { loose.set(raw, (loose.get(raw) || 0) + 1); continue; }
       const a = agg.get(c.key) || { c, qty: 0, gusto: false };
-      if (qty == null) a.gusto = true; else a.qty += qty * mult;
+      if (qty == null) a.gusto = true; else a.qty += qty * k;
       agg.set(c.key, a);
     }
   }
@@ -1929,11 +2034,11 @@ function renderPrices() {
   ALL.forEach((o) => o.i.forEach((raw) => { const { c } = parseIng(raw); if (c) used.add(c.key); }));
   // También lo registrado suelto (fruta, productos del catálogo…), para poder ponerle precio.
   Object.values(db).forEach((d) => (d.items || []).forEach((x) => (x.i || []).forEach((raw) => { const { c } = parseIng(raw); if (c) used.add(c.key); })));
-  userProducts().forEach((p) => used.add(p.key));
+  userProducts().forEach((p) => { if (!p.rec) used.add(p.key); else p.rec.i.forEach((raw) => { const { c } = parseIng(raw); if (c) used.add(c.key); }); });
   const unit = { g: "€/kg", ml: "€/l", ud: "€/ud" };
   const box = $("#priceList");
   if (box.contains(document.activeElement)) return; // no repintar mientras se escribe
-  box.innerHTML = catalog().filter((c) => used.has(c.key)).sort((a, b) => a.n.localeCompare(b.n, "es")).map((c) => `
+  box.innerHTML = catalog().filter((c) => used.has(c.key) && !c.rec).sort((a, b) => a.n.localeCompare(b.n, "es")).map((c) => `
     <label class="price-item"><span>${esc(c.n)}</span>
       <span class="price-in"><input type="text" inputmode="decimal" data-price="${c.key}" value="${prices[c.key] != null ? String(prices[c.key]).replace(".", ",") : ""}" placeholder="—" aria-label="Precio de ${esc(c.n)} en ${unit[c.u]}"><small>${unit[c.u]}</small></span></label>`).join("");
 }
@@ -2058,18 +2163,29 @@ document.addEventListener("click", (e) => {
   else if (b.dataset.edPick) openGrams(b.dataset.edPick);
   else if (b.dataset.edFit) setFit(b.dataset.edFit);
   else if (b.dataset.edApply) applyPick();
+  else if (b.dataset.state) {
+    if (b.dataset.stateKind === "ed") { if (ed.qtyOnly) ed.restate = true; openGrams(b.dataset.state, ed.grams); }
+    else openFoodGrams(b.dataset.state, $("#ffG").value);
+  }
   else if (b.dataset.edRebalance) { ed.undo = null; if (rebalanceEditor()) { ed.justFit = true; renderEditor(); } else toast("Ya está lo más ajustado posible"); }
   else if (b.dataset.edUndo) { if (ed.undo) { ed.i = ed.undo.i; ed.m = ed.undo.m; ed.undo = null; renderEditor(); } }
   else if (b.dataset.have) toggleHave(b.dataset.have);
   else if (b.dataset.haveGo) computeFromPantry();
   else if (b.dataset.havePick) openPantryPick();
   else if (b.dataset.edSave) saveEditor();
+  else if (b.dataset.recNew) openRecipeEditor(null);
+  else if (b.dataset.recOpen !== undefined) openRecipeEditor(b.dataset.recOpen || null);
+  else if (b.dataset.recAdd) openProductSheet(b.dataset.recAdd + "|0");
+  else if (b.dataset.recSave) saveRecipe();
+  else if (b.dataset.recDiscard) discardRecipe();
   else if (b.dataset.edReset) resetDish();
   else if (b.dataset.prodDel) {
     const before = userProducts(), gone = before.find((p) => p.key === b.dataset.prodDel);
+    if (gone && gone.rec && !confirm(`¿Borrar la receta «${gone.n}»?`)) return;
     saveProducts(before.filter((p) => p.key !== b.dataset.prodDel));
-    afterDishChange(); renderProducts();
-    toast("Borrado: " + (gone ? gone.n : "producto"), 6000, { label: "Deshacer", fn: () => { saveProducts(before); afterDishChange(); renderProducts(); toast("Producto recuperado"); } });
+    if (ed && ed.mode === "rec" && ed.key === b.dataset.prodDel && !$("#sheet").hidden) { clearRecipeDraft(); closeSheet(); }
+    afterDishChange(); renderRecetas();
+    toast("Borrado: " + (gone ? gone.n : "producto"), 6000, { label: "Deshacer", fn: () => { saveProducts(before); afterDishChange(); renderRecetas(); toast("Recuperado"); } });
   }
   else if (b.dataset.uStep || b.dataset.uSet) stepUnits(b);
   else if (b.dataset.slotPick) {
@@ -2661,7 +2777,7 @@ async function autoFood() {
 document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") autoFood(); });
 window.addEventListener("online", autoFood);
 
-const APP_VERSION = "v39"; // igual que CACHE en sw.js
+const APP_VERSION = "v41"; // igual que CACHE en sw.js
 $("#appVersion").textContent = "Versión de la app: " + APP_VERSION;
 
 /* arranque */

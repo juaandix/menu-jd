@@ -135,9 +135,18 @@
     <section id="view-recetas" class="view" hidden aria-label="Recetas">
       <header class="page-head">
         <h1>Recetas y notas</h1>
-        <p class="lead">Para hacer en lote, con sus macros por ración.</p>
+        <p class="lead">Las tuyas, apuntadas mientras cocinas, y las de lote.</p>
       </header>
-      <div id="recipeList" class="cards"></div>
+      <section class="block">
+        <h2>Mis recetas</h2>
+        <p class="muted small" id="myRecipesEmpty">Créala mientras cocinas: añade cada cosa que echas con sus gramos, pesa la comida al terminar y la app calcula sus macros. Luego la añades a cualquier comida por gramos o raciones.</p>
+        <div id="myRecipes" class="cards"></div>
+        <button class="btn" type="button" data-rec-new="1">+ Nueva receta</button>
+      </section>
+      <section class="block">
+        <h2>De lote</h2>
+        <div id="recipeList" class="cards"></div>
+      </section>
       <section class="block">
         <h2>Notas</h2>
         <ul id="notes" class="notes"></ul>

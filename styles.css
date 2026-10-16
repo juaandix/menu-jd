@@ -228,6 +228,18 @@ input[type=search]{-webkit-appearance:none;appearance:none;padding-left:38px;
 .custom > p{margin:0}
 .custom .grid4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
 .custom .grid4 input{padding-inline:8px;text-align:center}
+.state-row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+.state-row > span{grid-column:1/-1;font-size:.78rem;color:var(--muted);font-weight:550}
+.state-row .chip-opt{min-height:44px;justify-content:center;flex-wrap:wrap;gap:0 6px}
+.state-row .chip-opt small{color:var(--muted);font-weight:450}
+.rec-final{display:grid;gap:8px}
+.rec-final .grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.rec-final p{margin:0}
+#myRecipes .card p{margin:0}
+.rec-draft{border-color:var(--accent)}
+.rec-draft h3 .i{color:var(--accent)}
+.rec-ings summary{cursor:pointer;font-size:.85rem;color:var(--muted);min-height:32px;display:flex;align-items:center}
+.rec-ings ul{margin-top:4px}
 .ent-ings{margin:0;padding-left:18px;color:var(--muted);font-size:.88rem}
 
 /* toast */
