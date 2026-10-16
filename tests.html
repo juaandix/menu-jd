@@ -485,6 +485,37 @@ async function run() {
     }
   }
 
+  /* foto de la tabla nutricional */
+  const label = (txt) => E(`parseLabel(${JSON.stringify(txt)})`);
+  t("Etiqueta: tabla típica con columna por 100 g y por ración", () => {
+    const v = label("Información nutricional Por 100 g Por ración (125 g)\nValor energético 370 kJ / 88 kcal 462 kJ / 110 kcal\nGrasas 0,2 g 0,3 g\nde las cuales saturadas 0,1 g 0,1 g\nHidratos de carbono 3,6 g 4,5 g\nde los cuales azúcares 3,6 g 4,5 g\nProteínas 18 g 22,5 g\nSal 0,1 g 0,13 g");
+    eq(v.k, 88); eq(v.f, 0.2); eq(v.c, 3.6); eq(v.p, 18); eq(v.warn, undefined);
+  });
+  t("Etiqueta: kJ/kcal en cabecera y kcal en otra línea, sin tildes y con O por 0", () => {
+    const v = label("VALOR ENERGETICO (kJ/kcal) 1556/372\nGRASAS 7,O g\n- saturadas 1,2 g\nHIDRATOS DE CARBONO 58,7 g\nPROTEINAS 13,5 g");
+    eq(v.k, 372); eq(v.f, 7); eq(v.c, 58.7); eq(v.p, 13.5);
+  });
+  t("Etiqueta: solo kJ se pasa a kcal y se avisa si los macros no cuadran", () => {
+    const v = label("Energía 1000 kJ\nGrasas 50 g\nCarbohidratos 50 g\nProteínas 50 g");
+    eq(v.k, 239); eq(typeof v.warn, "string");
+  });
+  t("Etiqueta: la g leída como 9 (0,29 / 189) se corrige cuadrando con las kcal", () => {
+    const v = label("Valor energético 370 kJ / 88 kcal\nGrasas 0,29\nde las cuales saturadas 0,19\nHidratos de carbono 3,69\nde los cuales azúcares 3,69\nProteínas 189\nSal 0,10g");
+    eq(v.k, 88); eq(v.f, 0.2); eq(v.c, 3.6); eq(v.p, 18); eq(v.warn, undefined);
+  });
+  t("Etiqueta: con fibra las kcal no cuadran del todo y aun así se quita la g leída como 9", () => {
+    const v = label("Valor energético 1556 kJ / 372 kcal\nGrasas 7,09\nHidratos de carbono 58,79\nFibra alimentaria 109\nProteínas 13,59");
+    eq(v.f, 7); eq(v.c, 58.7); eq(v.p, 13.5);
+  });
+  t("Etiqueta: un 9 de verdad no se quita (19 g de proteína)", () => {
+    const v = label("Energía 120 kcal\nGrasas 1,5\nHidratos de carbono 3\nProteínas 19");
+    eq(v.p, 19); eq(v.f, 1.5);
+  });
+  t("Etiqueta: texto sin valores no inventa nada", () => {
+    const v = label("Ingredientes: leche, sal");
+    eq(v.k, null); eq(v.p, null); eq(v.c, null); eq(v.f, null);
+  });
+
   for (const [k, v] of Object.entries(saved)) if (v != null) w.localStorage.setItem(k, v); else w.localStorage.removeItem(k);
   E("parseCache.clear()");
   document.getElementById("out").innerHTML = lines.join("\n");

@@ -466,8 +466,13 @@ function openWebForm(q, sc = null) {
   $("#sheetBody").innerHTML = `
     <button class="back-link" type="button" data-web-back="1">${ico("back")} Volver a la búsqueda</button>
     <form id="webForm" class="custom"${sc ? ` data-ean="${esc(sc.ean)}"` : ""}>
-      ${sc ? `<p class="muted small">${sc.note}</p>${sc.nut ? "" : `<a class="btn ghost web-btn" href="${googleUrl(name || sc.ean)}" target="_blank" rel="noopener">${ico("external")} Buscar en Google</a>`}`
+      ${sc ? `<p class="muted small">${sc.note}</p>${sc.nut || !(name || sc.ean) ? "" : `<a class="btn ghost web-btn" href="${googleUrl(name || sc.ean)}" target="_blank" rel="noopener">${ico("external")} Buscar en Google</a>`}`
         : `<a class="btn ghost web-btn" href="${googleUrl(name)}" target="_blank" rel="noopener">${ico("external")} Abrir otra vez en Google</a>`}
+      ${labelPhotoHTML(sc && sc.nut ? "¿No cuadra? Leer la tabla de la etiqueta" : "Rellenar con una foto de la tabla")}
+      <div class="muted small" id="wfOcr" aria-live="polite"></div>
+      <details class="add-more"><summary>O pega el texto de la etiqueta</summary>
+        <textarea id="wfPaste" rows="4" placeholder="En el iPhone: abre la foto, mantén pulsado el texto de la tabla, Copiar, y pégalo aquí."></textarea>
+      </details>
       <label for="wfName">Nombre<input type="text" id="wfName" value="${esc(name)}" required autocomplete="off"></label>
       <p class="muted small">Valores <b>por 100 g</b> (si solo encuentras los de una ración, divide entre sus gramos y multiplica por 100):</p>
       <div class="grid4">
@@ -485,7 +490,7 @@ function openWebForm(q, sc = null) {
     const num = (id) => numES($(id).value) || 0, g = num("#wfG");
     $("#wfPrev").innerHTML = num("#wfK") && g ? `${fmtG(g)} g → <b>${macrosTxt({ k: num("#wfK") * g / 100, p: num("#wfP") * g / 100, c: num("#wfC") * g / 100, f: num("#wfF") * g / 100 })}</b>` : "";
   };
-  $("#webForm").addEventListener("input", prev);
+  $("#webForm").addEventListener("input", (e) => { if (e.target.id === "wfPaste") fillFromLabel(e.target.value, false); prev(); });
   prev();
 }
 function saveWebForm() {
@@ -511,7 +516,7 @@ function barcodeDetector() {
     if ("BarcodeDetector" in window) {
       try { const ok = await BarcodeDetector.getSupportedFormats(); if (ok.includes("ean_13")) return new BarcodeDetector({ formats: BARCODE_FORMATS.filter((f) => ok.includes(f)) }); } catch {}
     }
-    await new Promise((res, rej) => { const s = document.createElement("script"); s.src = "lib/barcode/barcode-detector-ponyfill.js"; s.onload = res; s.onerror = () => rej(new Error("lib")); document.head.append(s); });
+    await loadScript("lib/barcode/barcode-detector-ponyfill.js");
     const api = window.BarcodeDetectionAPI;
     api.prepareZXingModule({ overrides: { locateFile: (path, prefix) => (path.endsWith(".wasm") ? new URL("lib/barcode/" + path, location.href).href : prefix + path) } });
     return new api.BarcodeDetector({ formats: BARCODE_FORMATS });
@@ -523,6 +528,7 @@ function openScan() {
     <button class="back-link" type="button" data-web-back="1">${ico("back")} Volver a la búsqueda</button>
     <div class="scan-box"><video id="scanVideo" playsinline muted autoplay></video><span class="scan-aim"></span></div>
     <p class="muted small" id="scanMsg">Abriendo la cámara…</p>
+    ${labelPhotoHTML("Sin código: foto de la tabla nutricional")}
     <form id="scanForm" class="custom">
       <label for="scanCode">O escribe el número del código<input type="text" id="scanCode" inputmode="numeric" autocomplete="off" placeholder="p. ej. 8480000123456"></label>
       <button class="btn ghost" type="submit">Buscar</button>
@@ -589,6 +595,96 @@ async function lookupBarcode(code) {
     : p ? "Open Food Facts lo conoce pero sin macros: cópialos de la etiqueta (por 100 g)."
     : "No está en Open Food Facts: copia los valores de la etiqueta (por 100 g).";
   openWebForm(name, { ean: code, nut, note });
+}
+/* ---------- leer la tabla nutricional de una foto (OCR en el móvil, gratis) ----------
+   tesseract.js con el modelo de español, alojado en lib/ocr (~6 MB la primera vez; el modelo queda en IndexedDB).
+   Del texto se sacan kcal, proteínas, hidratos y grasas por 100 g (primera columna) con parseLabel(), que también
+   sirve para el texto pegado (Texto en vivo del iPhone, que lee mejor que el OCR). Siempre se revisa a mano. */
+function loadScript(src) {
+  return new Promise((res, rej) => { const s = document.createElement("script"); s.src = src; s.onload = res; s.onerror = () => rej(new Error("lib")); document.head.append(s); });
+}
+const labelPhotoHTML = (txt) => `<label class="btn ghost web-btn">${ico("camera")} ${txt}<input type="file" accept="image/*" data-label-photo="1" hidden></label>`;
+// Valores por 100 g de un texto de etiqueta: { k, p, c, f } (null lo que no aparece) y `warn` si no cuadran con las kcal.
+function parseLabel(text) {
+  const t = norm(text).replace(/(\d)[o]|[o](?=[.,]\d)/g, (m, d) => (d ? d + "0" : "0")), lines = t.split(/\n+/);
+  const num = (x) => parseFloat(x.replace(",", "."));
+  let k = null;
+  const kc = t.match(/(\d+(?:[.,]\d+)?)\s*kcal/);
+  if (kc) k = num(kc[1]);
+  else {
+    const el = lines.find((l) => /energ|kj/.test(l)) || "";
+    const pair = el.match(/(\d+(?:[.,]\d+)?)\s*(?:kj)?\s*\/\s*(\d+(?:[.,]\d+)?)/), kj = el.match(/(\d+(?:[.,]\d+)?)\s*kj/);
+    if (pair) k = num(pair[2]); else if (kj) k = num(kj[1]) / 4.184;
+  }
+  // Posibles valores de la línea: el OCR suele leer "0,2 g" como "0,29" o "18 g" como "189" (la g como 9), así que
+  // un número acabado en 9 sin "g" detrás se toma sin el 9, salvo que con el 9 cuadre bastante mejor con las kcal
+  // (cada 9 que se deja pesa 15 kcal: la fibra y el redondeo de la etiqueta ya descuadran algo).
+  const grab = (re, skip) => {
+    for (const l of lines) {
+      const m = l.match(re);
+      if (!m || (skip && skip.test(l))) continue;
+      const rest = l.slice(m.index + m[0].length), g = rest.match(/(\d+(?:[.,]\d+)?)\s*g\b/);
+      if (g && num(g[1]) <= 100) return [num(g[1])];
+      const n = rest.match(/\d+(?:[.,]\d+)?/);
+      if (!n) continue;
+      const out = [...(n[0].length > 1 && n[0].endsWith("9") ? [num(n[0].slice(0, -1))] : []), num(n[0])].filter((x) => x <= 100);
+      if (out.length) return out;
+    }
+    return [null];
+  };
+  k = k != null && k <= 950 ? r0(k) : null;
+  const P = grab(/prote/), C = grab(/hidratos|carbohidratos/, /azucar/), F = grab(/grasa|lipido/, /satur|mono|poli|trans/);
+  let v = { k, p: P[0], c: C[0], f: F[0] }, best = Infinity;
+  if (k != null) for (const [i, p] of P.entries()) for (const [j, c] of C.entries()) for (const [l, f] of F.entries()) {
+    const err = Math.abs(4 * (p || 0) + 4 * (c || 0) + 9 * (f || 0) - k) + 15 * (i + j + l);
+    if (err < best) { best = err; v = { k, p, c, f }; }
+  }
+  if (v.k != null && v.p != null && v.c != null && v.f != null) {
+    const est = 4 * v.p + 4 * v.c + 9 * v.f;
+    if (Math.abs(est - v.k) > Math.max(20, 0.2 * v.k)) v.warn = `los números no cuadran (${r0(est)} kcal según los macros): revísalos`;
+  }
+  return v;
+}
+// Rellena el formulario con lo leído. `photo`: viene del OCR (enseña el texto leído para comprobarlo).
+function fillFromLabel(text, photo) {
+  const v = parseLabel(text), st = $("#wfOcr");
+  const map = { k: "#wfK", p: "#wfP", c: "#wfC", f: "#wfF" }, got = Object.keys(map).filter((x) => v[x] != null);
+  got.forEach((x) => { $(map[x]).value = String(v[x]).replace(".", ","); });
+  if (!st) return;
+  const names = { k: "kcal", p: "proteína", c: "hidratos", f: "grasa" };
+  st.innerHTML = !got.length ? (photo ? "No he encontrado los valores. Haz la foto más cerca, recta y con luz, o pega el texto." : "")
+    : `Leído: ${got.map((x) => names[x]).join(", ")}${got.length < 4 ? ` · falta ${Object.keys(map).filter((x) => v[x] == null).map((x) => names[x]).join(", ")}` : ""}. ${v.warn ? `<b>Ojo: ${v.warn}.</b>` : "Compruébalo con la etiqueta."}`
+      + (photo ? `<details><summary>Texto leído</summary><pre class="ocr-text">${esc(text.trim())}</pre></details>` : "");
+  $("#webForm").dispatchEvent(new Event("input"));
+}
+let ocrWorkerP = null;
+function ocrWorker() {
+  if (!ocrWorkerP) ocrWorkerP = (async () => {
+    await loadScript("lib/ocr/tesseract.min.js");
+    const base = new URL("lib/ocr/", location.href).href;
+    return Tesseract.createWorker("spa", 1, { workerPath: base + "worker.min.js", corePath: base, langPath: base.replace(/\/$/, ""), workerBlobURL: false });
+  })().catch((e) => { ocrWorkerP = null; throw e; });
+  return ocrWorkerP;
+}
+// Foto reducida (lado largo ≤ 2000 px) para que el OCR vaya rápido en el móvil.
+async function ocrImage(file) {
+  const bmp = await createImageBitmap(file), sc = Math.min(1, 2000 / Math.max(bmp.width, bmp.height));
+  const cv = document.createElement("canvas");
+  cv.width = Math.round(bmp.width * sc); cv.height = Math.round(bmp.height * sc);
+  cv.getContext("2d").drawImage(bmp, 0, 0, cv.width, cv.height);
+  return cv;
+}
+async function readLabelPhoto(file) {
+  if (!$("#webForm")) { stopScan(); openWebForm("", { note: "Revisa los valores con la etiqueta y pon el nombre del producto." }); }
+  const st = $("#wfOcr"), form = $("#webForm");
+  st.textContent = ocrWorkerP ? "Leyendo la etiqueta…" : "Leyendo la etiqueta… (la primera vez descarga el lector, unos 6 MB)";
+  try {
+    const [img, worker] = await Promise.all([ocrImage(file), ocrWorker()]);
+    const { data } = await worker.recognize(img);
+    if ($("#webForm") === form) fillFromLabel(data.text, true);
+  } catch (e) {
+    if ($("#webForm") === form) st.textContent = e.message === "lib" ? "No se pudo cargar el lector (¿sin conexión?). Pega el texto o escribe los valores." : "No se pudo leer la foto. Prueba otra vez o escribe los valores.";
+  }
 }
 // Registra un ingrediente o producto suelto con sus gramos (lleva i para que salga en la compra y en el coste).
 function logFood(optId, g) {
@@ -2010,7 +2106,10 @@ $("#sheetBody").addEventListener("submit", (e) => {
 });
 $("#prevDay").addEventListener("click", () => { current.setDate(current.getDate() - 1); renderHoy(); });
 $("#nextDay").addEventListener("click", () => { current.setDate(current.getDate() + 1); renderHoy(); });
-$("#sheetBody").addEventListener("change", (e) => { if (e.target.id === "entTime" && entState) entTime(e.target.value); });
+$("#sheetBody").addEventListener("change", (e) => {
+  if (e.target.id === "entTime" && entState) entTime(e.target.value);
+  if (e.target.dataset.labelPhoto && e.target.files[0]) readLabelPhoto(e.target.files[0]);
+});
 $("#dayType").addEventListener("change", (e) => { getDay(iso(current)).type = e.target.value; saveAll(db); renderHoy(); });
 $("#stepsIn").addEventListener("change", (e) => {
   const day = getDay(iso(current));
@@ -2523,7 +2622,7 @@ async function autoFood() {
 document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") autoFood(); });
 window.addEventListener("online", autoFood);
 
-const APP_VERSION = "v36"; // igual que CACHE en sw.js
+const APP_VERSION = "v37"; // igual que CACHE en sw.js
 $("#appVersion").textContent = "Versión de la app: " + APP_VERSION;
 
 /* arranque */
