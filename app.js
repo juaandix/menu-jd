@@ -472,10 +472,12 @@ function openWebForm(q, sc = null) {
   const name = q.trim().replace(/\s+/g, " ");
   const same = name ? userProducts().find((p) => norm(p.n) === norm(name)) : null;
   const v = (i) => (sc && sc.nut ? String(sc.nut[i]).replace(".", ",") : same ? String(same.nut[i]).replace(".", ",") : "");
+  const menu = sheetState.from === "menu"; // alta desde Menú → Productos: registrarlo ahora es opcional
   $("#sheetBody").innerHTML = `
-    <button class="back-link" type="button" data-web-back="1">${ico("back")} Volver a la búsqueda</button>
-    <form id="webForm" class="custom"${sc ? ` data-ean="${esc(sc.ean)}"` : ""}>
-      ${sc ? `<p class="muted small">${sc.note}</p>${sc.nut || !(name || sc.ean) ? "" : `<a class="btn ghost web-btn" href="${googleUrl(name || sc.ean)}" target="_blank" rel="noopener">${ico("external")} Buscar en Google</a>`}`
+    ${menu && !sc ? `<button class="btn ghost web-btn" type="button" data-scan="1">${ico("barcode")} Escanear el código de barras</button>`
+      : `<button class="back-link" type="button" data-web-back="1">${ico("back")} ${menu ? "Volver" : "Volver a la búsqueda"}</button>`}
+    <form id="webForm" class="custom"${sc && sc.ean ? ` data-ean="${esc(sc.ean)}"` : ""}>
+      ${menu && !sc ? (name ? `<a class="btn ghost web-btn" href="${googleUrl(name)}" target="_blank" rel="noopener">${ico("external")} Buscar sus macros en Google</a>` : "") : sc ? `<p class="muted small">${sc.note}</p>${sc.nut || !(name || sc.ean) ? "" : `<a class="btn ghost web-btn" href="${googleUrl(name || sc.ean)}" target="_blank" rel="noopener">${ico("external")} Buscar en Google</a>`}`
         : `<a class="btn ghost web-btn" href="${googleUrl(name)}" target="_blank" rel="noopener">${ico("external")} Abrir otra vez en Google</a>`}
       ${labelPhotoHTML(sc && sc.nut ? "¿No cuadra? Foto o captura de la tabla" : "Foto o captura de la tabla")}
       <div class="muted small" id="wfOcr" aria-live="polite"></div>
@@ -490,28 +492,36 @@ function openWebForm(q, sc = null) {
         <label for="wfC">Carb.<input type="text" inputmode="decimal" id="wfC" value="${v(2)}" placeholder="0"></label>
         <label for="wfF">Grasa<input type="text" inputmode="decimal" id="wfF" value="${v(3)}" placeholder="0"></label>
       </div>
-      <label for="wfG">¿Cuántos gramos has comido?<input type="text" inputmode="decimal" id="wfG" placeholder="p. ej. 300" required></label>
+      ${menu ? `<p class="muted small">¿Lo registras ya en ${esc(dayLabel(current).split(" · ")[0].toLowerCase())}? Pon los gramos y la comida; si no, déjalo vacío y solo se guarda.</p>
+      <div class="recent-row slot-pick">${daySlots(getDay(iso(current))).map((sl) => `<button type="button" class="chip-opt${sl.id === sheetState.slot ? " on" : ""}" data-slot-pick="${sl.id}">${esc(sl.label)}</button>`).join("")}</div>` : ""}
+      <label for="wfG">${menu ? "Gramos que has comido (opcional)" : "¿Cuántos gramos has comido?"}<input type="text" inputmode="decimal" id="wfG" placeholder="p. ej. 300"${menu ? "" : " required"}></label>
       <label for="wfR">Tipo de alimento<select id="wfR"><option value="">Sin tipo</option>${Object.entries(ROLE_LABELS).map(([k, l]) => `<option value="${k}"${same && same.r === k ? " selected" : ""}>${l}</option>`).join("")}</select></label>
       <p class="ed-sum" id="wfPrev"></p>
-      <button class="btn" type="submit">Registrar y guardar en Mis productos</button>
+      <button class="btn" type="submit" id="wfGo">${menu ? "Guardar en Mis productos" : "Registrar y guardar en Mis productos"}</button>
     </form>`;
   const prev = () => {
     const num = (id) => numES($(id).value) || 0, g = num("#wfG");
     $("#wfPrev").innerHTML = num("#wfK") && g ? `${fmtG(g)} g → <b>${macrosTxt({ k: num("#wfK") * g / 100, p: num("#wfP") * g / 100, c: num("#wfC") * g / 100, f: num("#wfF") * g / 100 })}</b>` : "";
   };
-  $("#webForm").addEventListener("input", (e) => { if (e.target.id === "wfPaste") fillFromLabel(e.target.value, false); prev(); });
+  $("#webForm").addEventListener("input", (e) => {
+    if (e.target.id === "wfPaste") fillFromLabel(e.target.value, false);
+    prev();
+    if (menu) $("#wfGo").textContent = numES($("#wfG").value) > 0 ? `Guardar y añadir a ${profile.slots.find((x) => x.id === sheetState.slot).label}` : "Guardar en Mis productos";
+  });
   prev();
 }
 function saveWebForm() {
   const num = (id) => numES($(id).value) || 0;
   let n = $("#wfName").value.trim().replace(/\s+/g, " "); n = n.charAt(0).toUpperCase() + n.slice(1);
-  const k = num("#wfK"), g = num("#wfG");
-  if (!n || !$("#wfK").value.trim() || !(g > 0)) { toast("Pon el nombre, las kcal por 100 g y los gramos"); return; }
+  const k = num("#wfK"), g = num("#wfG"), menu = sheetState.from === "menu";
+  if (!n || !$("#wfK").value.trim() || !(g > 0 || menu)) { toast("Pon el nombre, las kcal por 100 g y los gramos"); return; }
   const code = $("#webForm").dataset.ean, list = userProducts();
   const same = list.find((p) => code && p.ean === code) || list.find((p) => norm(p.n) === norm(n)), ean = code || (same && same.ean);
   const prod = { key: same ? same.key : "u" + Date.now().toString(36), n, nut: [k, num("#wfP"), num("#wfC"), num("#wfF")], ...($("#wfR").value ? { r: $("#wfR").value } : {}), ...(ean ? { ean } : {}) };
   saveProducts([...list.filter((p) => p.key !== prod.key), prod]);
-  logFood(prod.key + "|0", g);
+  if (g > 0) logFood(prod.key + "|0", g);
+  else { closeSheet(); toast((same ? "Actualizado: " : "Guardado en Mis productos: ") + n); }
+  if (menu) { renderProductsPane(); renderProducts(); }
 }
 /* ---------- escanear código de barras ----------
    Cámara → código EAN → Open Food Facts (base de datos abierta, gratis y sin clave; los datos los sube la gente) →
@@ -1086,6 +1096,8 @@ function guessSlot() {
   return want.find((id) => ids.includes(id)) || ids[0];
 }
 function renderProductsPane() {
+  $("#prodNew").innerHTML = `<button class="btn ghost" type="button" data-prod-new="form">${ico("plus")} Nuevo producto</button>
+    <button class="btn ghost" type="button" data-prod-new="scan">${ico("barcode")} Escanear</button>`;
   const q = norm(($("#prodSearch").value || "").trim()), opts = foodOptions();
   const cats = ["Mis recetas", ...SHOP_CATS].filter((cat) => opts.some((o) => o.c.cat === cat));
   $("#prodCats").innerHTML = [["", "Todo"], ...cats.map((c) => [c, c])].map(([v, l]) => `<button type="button" class="chip-opt${v === prodCat ? " on" : ""}" data-prod-cat="${esc(v)}">${esc(l)}</button>`).join("");
@@ -1095,7 +1107,13 @@ function renderProductsPane() {
   const groups = q || prodCat ? [[null, list]] : cats.map((cat) => [cat, list.filter((o) => o.c.cat === cat)]);
   $("#prodList").innerHTML = list.length
     ? groups.map(([cat, l]) => `${cat ? `<h3 class="recent-label">${esc(cat)}</h3>` : ""}<div class="ed-options">${[...l].sort((a, b) => a.label.localeCompare(b.label, "es")).map(row).join("")}</div>`).join("")
-    : `<p class="empty">Nada con «${esc($("#prodSearch").value.trim())}». Puedes buscarlo en Google desde Hoy → Añadir.</p>`;
+    : `<p class="empty">Nada con «${esc($("#prodSearch").value.trim())}».</p><button class="btn" type="button" data-prod-new="form">${ico("plus")} Crear «${esc($("#prodSearch").value.trim())}»</button>`;
+}
+function openNewProduct(scanFirst) {
+  sheetState = { slot: guessSlot(), query: "", from: "menu" };
+  $("#sheetTitle").textContent = "Nuevo producto";
+  if (scanFirst) openScan(); else openWebForm($("#prodSearch").value);
+  openSheetShell();
 }
 function openProductSheet(optId) {
   const o = foodOptions().find((x) => x.id === optId);
@@ -1110,6 +1128,7 @@ $("#view-menu").addEventListener("click", (e) => {
   if (tab) setMenuTab(tab.dataset.mtab);
   else if (cat) { prodCat = cat.dataset.prodCat; renderProductsPane(); }
   else if (add) openProductSheet(add.dataset.prodAdd);
+  else if (e.target.closest("[data-prod-new]")) openNewProduct(e.target.closest("[data-prod-new]").dataset.prodNew === "scan");
 });
 $("#prodSearch").addEventListener("input", renderProductsPane);
 
@@ -2191,7 +2210,9 @@ document.addEventListener("click", (e) => {
   else if (b.dataset.slotPick) {
     sheetState.slot = b.dataset.slotPick;
     b.parentElement.querySelectorAll("[data-slot-pick]").forEach((x) => x.classList.toggle("on", x === b));
-    $("#ffGo").textContent = "Añadir a " + profile.slots.find((s) => s.id === sheetState.slot).label;
+    const lab = profile.slots.find((s) => s.id === sheetState.slot).label;
+    if ($("#ffGo")) $("#ffGo").textContent = "Añadir a " + lab;
+    if ($("#wfGo") && numES($("#wfG").value) > 0) $("#wfGo").textContent = "Guardar y añadir a " + lab;
   }
   else if (b.dataset.mStep) stepMult(b);
   else if (b.dataset.webSearch) {
@@ -2200,7 +2221,7 @@ document.addEventListener("click", (e) => {
     window.open(googleUrl(q), "_blank", "noopener");
     openWebForm(q);
   }
-  else if (b.dataset.webBack) { stopScan(); showSheetList(); }
+  else if (b.dataset.webBack) { stopScan(); if (sheetState.from === "menu") openWebForm(""); else showSheetList(); }
   else if (b.dataset.scan) openScan();
   else if (b.dataset.labelPaste) pasteLabelImage();
   else if (b.dataset.foodLog) openFoodGrams(b.dataset.foodLog);
@@ -2777,7 +2798,7 @@ async function autoFood() {
 document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") autoFood(); });
 window.addEventListener("online", autoFood);
 
-const APP_VERSION = "v41"; // igual que CACHE en sw.js
+const APP_VERSION = "v42"; // igual que CACHE en sw.js
 $("#appVersion").textContent = "Versión de la app: " + APP_VERSION;
 
 /* arranque */

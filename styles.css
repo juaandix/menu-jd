@@ -457,6 +457,8 @@ input[type=search]{-webkit-appearance:none;appearance:none;padding-left:38px;
 .products-pane .cat-row::-webkit-scrollbar{display:none}
 .products-pane .cat-row .chip-opt{flex:none}
 .products-pane h3.recent-label{margin:16px 0 6px}
+.prod-new{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:10px}
+.prod-new .btn{white-space:nowrap;padding-inline:10px;gap:6px;font-size:.92rem}
 .prod-head{display:grid;grid-template-columns:48px 1fr;gap:12px;align-items:center}
 .prod-head .thumb{width:48px;height:48px;border-radius:12px}
 .prod-head p{margin:0;display:grid;gap:2px}

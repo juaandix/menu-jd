@@ -257,6 +257,7 @@ Tests: abrir `http://localhost:8080/tests.html` (carga la app en un iframe y pru
 
 ## Menú → Productos
 - Pestañas "Platos | Productos" justo bajo el título del Menú: control segmentado `.mtabs` (fijo arriba al hacer scroll, cada pestaña con su subtítulo y recuento: "24 recetas completas" / "153 alimentos sueltos"). Ojo: no usar la clase `.seg` para controles, es la barra segmentada del marcador (`setMenuTab()`; clases `dishes-only` / `products-only` y `#view-menu.show-products`). Productos = todo el catálogo con macros (`foodOptions()`: SHOP + Mis productos, también las versiones cocidas), agrupado por categoría de la compra (`SHOP_CATS`), con buscador, filtro por categoría y foto.
+- **Alta de productos** (bajo el buscador: «Nuevo producto» y «Escanear», `#prodNew`; y «Crear «texto»» si la búsqueda no encuentra nada): `openNewProduct()` abre `openWebForm` / `openScan` con `sheetState.from = "menu"`. En ese modo los gramos son opcionales: vacío = solo se guarda en Mis productos; con gramos se guarda y se registra en la franja elegida (`data-slot-pick`) del día abierto en Hoy. «Volver» desde el escáner vuelve al formulario.
 - Al tocar uno (`openProductSheet`) se abre la hoja de gramos/unidades (`openFoodGrams` con `sheetState.from = "menu"`) con selector de franja (`data-slot-pick`); se propone por la hora si el día abierto es hoy (`guessSlot()`), si no la primera. Se registra con `logFood` en el **día abierto en Hoy** (como "Monta tu día"), así que sirve para planificar días futuros.
 
 ## Despensa y atajos
