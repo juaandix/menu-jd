@@ -166,7 +166,7 @@ function renderHoy() {
     const st = totals(items);
     const fav = items.length ? null : favorite(s.id, key);
     return `<section class="slot${items.length ? "" : " is-empty"}" aria-label="${s.label}">
-      <div class="slot-head"><h3>${s.label}<small>${items.length ? `<b>${r0(st.k)} kcal · ${r0(st.p)} g P</b> · ${hint}` : hint}</small></h3>
+      <div class="slot-head"><h3>${s.label}<small>${items.length ? slotSub(s, st, hint, s.id === "S" && type.mods) : hint}</small></h3>
         <button class="add-btn" data-add="${s.id}" aria-label="Añadir a ${s.label}">+ Añadir</button></div>
       ${items.length ? `<div class="slot-body">${items.map((x) => `
         <div class="entry${entryThumb(x) ? " has-thumb" : ""}">${entryThumb(x)}<button class="name" type="button" data-entry="${x.idx}" aria-label="Editar ${esc(x.n)}"><b>${nameHTML(x.n)}</b><span>${x.t ? x.t + " · " : ""}P ${f1(x.p)} · C ${r0(x.c || 0)} · G ${r0(x.f || 0)}${costLabel(itemDishCost(x)) ? " · " + costLabel(itemDishCost(x)) : ""}${x.ref && x.i ? " · editado" : ""}</span></button>
@@ -270,6 +270,14 @@ function copyDay(from) {
     const d = getDay(key); d.items = d.items.filter((x) => !added.includes(x)); saveAll(db); renderHoy(); toast("Deshecho");
   } });
 }
+// Subtotal de la franja frente a su objetivo ("499 / ~500 kcal · 40 / ~40 g P"). Cada trozo va sin cortar
+// (span .nw), para que en pantallas estrechas salte de línea entre trozos y no deje "kcal" suelto.
+function slotSub(s, st, hint, mods) {
+  const join = (parts) => parts.map((t, i) => `<span class="nw">${t}${i < parts.length - 1 ? " ·" : ""}</span>`).join(" ");
+  const m = (s.hint || "").match(/~([\d.]+) kcal · (?:~([\d.]+)|([\d–]+)) g P/);
+  if (!m) return join([`<b>${r0(st.k)} kcal · ${r0(st.p)} g P</b>`, hint]);
+  return join([`<b>${r0(st.k)}</b> / ~${m[1]} kcal`, `<b>${r0(st.p)}</b> ${m[2] ? `/ ~${m[2]} ` : ""}g P${m[3] ? ` (${m[3]})` : ""}`, ...(mods ? [`${mods} hoy`] : [])]);
+}
 /* pasos: si el tipo de día trae pasos de referencia, el objetivo se ajusta con los pasos reales */
 const KCAL_PER_STEP_KG = 0.0004; // ≈ 0,035 kcal por paso a 87 kg (gasto neto andando)
 function latestWeight(beforeKey) {
@@ -288,7 +296,7 @@ function renderSteps(day, type, key, adj) {
   const fmt = (n) => n.toLocaleString("es-ES");
   let msg;
   if (type.steps && typeof day.steps === "number")
-    msg = `${adj > 0 ? "+" : ""}${adj} kcal al objetivo (cuenta con ~${fmt(type.steps)} pasos)${key === iso(new Date()) ? " · el día sigue: actualiza por la noche" : ""}`;
+    msg = `${adj > 0 ? "+" : ""}${adj} kcal al objetivo (referencia: ${fmt(type.steps)} pasos)`;
   else if (type.steps) msg = `El objetivo ya cuenta con ~${fmt(type.steps)} pasos.`;
   else if (typeof day.steps === "number") msg = `≈ ${fmt(Math.round(day.steps * KCAL_PER_STEP_KG * latestWeight(key)))} kcal andando (no ajusta el objetivo).`;
   else msg = "";
@@ -2653,7 +2661,7 @@ async function autoFood() {
 document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") autoFood(); });
 window.addEventListener("online", autoFood);
 
-const APP_VERSION = "v38"; // igual que CACHE en sw.js
+const APP_VERSION = "v39"; // igual que CACHE en sw.js
 $("#appVersion").textContent = "Versión de la app: " + APP_VERSION;
 
 /* arranque */

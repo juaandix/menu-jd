@@ -55,7 +55,7 @@ h3{font-weight:620}
 button,select,input{font:inherit;color:inherit}
 button{-webkit-user-select:none;user-select:none}
 a{color:var(--accent)}
-.muted{color:var(--muted)} .small{font-size:.84rem}
+.muted{color:var(--muted)} .small{font-size:.84rem} .nw{white-space:nowrap} p.muted:empty{display:none}
 .lead{color:var(--muted);margin:8px 0 0;font-size:.95rem}
 .view{display:grid;gap:16px;grid-template-columns:minmax(0,1fr)}
 .page-head{padding-top:8px}
@@ -425,8 +425,8 @@ input[type=search]{-webkit-appearance:none;appearance:none;padding-left:38px;
 .wlist.photos .btn{min-height:40px;padding:8px 12px;font-size:.84rem}
 #photoSearch{margin-bottom:10px}
 .credits{margin-top:12px}
-.credits summary{cursor:pointer;color:var(--accent);font-size:.88rem;min-height:44px;display:flex;align-items:center}
-.credits a{color:var(--accent);overflow-wrap:anywhere}
+.credits summary,.help summary{cursor:pointer;color:var(--accent);font-size:.88rem;min-height:44px;display:flex;align-items:center}
+.credits a,.help a{color:var(--accent);overflow-wrap:anywhere}
 .photos li span{display:grid;padding:8px 0;gap:1px;min-width:0}
 
 /* Menú: pestañas Platos | Productos */

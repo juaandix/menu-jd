@@ -211,6 +211,12 @@ Tests: abrir `http://localhost:8080/tests.html` (carga la app en un iframe y pru
 - Ajustes: pestaña nueva con Mis productos, Fotos de productos, Copia de seguridad (y versión) y Google. Recetas queda solo con recetas y notas.
 - Sin rótulos pequeños sobre los títulos (el texto va en `.lead`). `--faint` subido a `#7a8db2` (JD) y `#9c84b1` (Cristina): ≥4,5:1 sobre fondo y tarjetas.
 
+## Pulido del 16/10/2026
+- Se probó un rediseño completo con Impeccable (direcciones: placas de azulejo, pizarra del menú del día, señalética de aeropuerto, estándar de fitness) y el usuario **no quiso ninguna**: se queda el estilo marcador y solo se pule. No volver a proponer un mundo visual nuevo salvo que lo pida. `PRODUCT.md` (raíz) guarda la verdad del producto para Impeccable: oscura siempre, registrar con pocos toques, cifras siempre a la vista.
+- Subtotal de franja frente a su objetivo con `slotSub()`: «499 / ~500 kcal · 40 / ~40 g P» (lee el `hint` del perfil; en Cristina quita «(orientativo)» cuando ya hay comidas). Cada trozo va en `.nw` (sin cortar) con el «·» pegado al anterior, para que a 320 px no quede «kcal» suelto.
+- Texto de pasos acortado; Ajustes → Google con una frase y las instrucciones técnicas plegadas en «Cómo configurarlo» (`details.help`); párrafo de la lista de la compra acortado; `p.muted:empty` oculto.
+- Detector de Impeccable: además del falso positivo de `.seg`, marca la raya izquierda de `section.slot` (side-tab); es intencionada (pedido del usuario).
+
 ## Estilo «marcador deportivo» (elegido por el usuario el 15/10/2026)
 - Voz del marcador: `--score` = Barlow Condensed (500/600/700) para cifras grandes, encabezados de sección, cabecera de fecha, pestañas y etiquetas en mayúsculas con espaciado; el texto de lectura y los controles siguen en la fuente del sistema.
 - Firma: barras segmentadas (`.seg`, máscara `repeating-linear-gradient`; el detector de Impeccable la marca como «stripes», es un falso positivo). Semana: fichas como panel de marcador (rejilla con líneas de 1 px, sin tarjetas dentro de tarjetas).

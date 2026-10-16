@@ -114,7 +114,7 @@
 
       <section class="block">
         <h2>Lista de la compra</h2>
-        <p class="muted small">Sale de los platos registrados y planificados en esta semana. Pasta, arroz y pollo van en crudo/seco. Para planificar, usa "Planificar días vacíos", registra los días que vienen desde Hoy o usa "Monta tu día". Lo que marques como comprado deja de salir como que te falta en el Menú.</p>
+        <p class="muted small">Lo registrado y planificado esta semana; pasta, arroz y pollo en crudo. Marcarlo como comprado lo quita de «Me falta».</p>
         <div id="shopList"></div>
         <div class="row">
           <button class="btn ghost" id="shopCopy">Copiar lista</button>
@@ -177,8 +177,7 @@
       </section>
       <section class="block" id="gcalSection">
         <h2>Google: turnos y Fitbit</h2>
-        <p class="muted">Conecta tu Google Calendar para que el botón de calendario de la pantalla Hoy proponga si ese día trabajas, buscando una palabra clave en el título de los eventos de ese día. Necesita conexión a internet; el resto de la app sigue funcionando sin ella.</p>
-        <p class="muted" id="healthHelp">Con el mismo Client ID, los botones "Fitbit" de Hoy y Semana traen tus pasos (y tu peso, si lo registras en Google Health) desde la API de Google Health. En el proyecto de Google Cloud tienen que estar habilitada la "Google Health API" y los permisos <code>googlehealth.activity_and_fitness.readonly</code> y, para el peso, <code>googlehealth.health_metrics_and_measurements.readonly</code>. Para enviar tus comidas (botón de Hoy) hace falta además <code>googlehealth.nutrition.writeonly</code>.</p>
+        <p class="muted">El calendario propone si ese día trabajas (busca la palabra clave en tus eventos) y Fitbit trae pasos y peso. Necesita conexión; el resto de la app funciona sin ella.</p>
         <div class="sel">
           <label for="gcalClientId">Client ID de Google<input type="text" id="gcalClientId" autocomplete="off" spellcheck="false" autocapitalize="off" placeholder="xxxx.apps.googleusercontent.com"></label>
           <label for="gcalKeyword">Palabra clave<input type="text" id="gcalKeyword" autocomplete="off" placeholder="turno"></label>
@@ -188,7 +187,10 @@
           <button class="btn ghost" id="gcalDisconnect">Desconectar</button>
         </div>
         <p class="muted small" id="gcalMsg" role="status"></p>
-        <p class="muted small">¿Cómo consigo el Client ID? En <a href="https://console.cloud.google.com/" target="_blank" rel="noopener">Google Cloud Console</a>: crea un proyecto → activa la API "Google Calendar API" → pantalla de consentimiento OAuth (tipo Externo, añádete como usuario de prueba) → Credenciales → "Crear credenciales" → "ID de cliente de OAuth" tipo Aplicación web → en "Orígenes de JavaScript autorizados" añade exactamente <code id="gcalOrigin"></code> → copia el Client ID y pégalo arriba.</p>
+        <details class="help"><summary>Cómo configurarlo</summary>
+          <p class="muted small">¿Cómo consigo el Client ID? En <a href="https://console.cloud.google.com/" target="_blank" rel="noopener">Google Cloud Console</a>: crea un proyecto → activa la API "Google Calendar API" → pantalla de consentimiento OAuth (tipo Externo, añádete como usuario de prueba) → Credenciales → "Crear credenciales" → "ID de cliente de OAuth" tipo Aplicación web → en "Orígenes de JavaScript autorizados" añade exactamente <code id="gcalOrigin"></code> → copia el Client ID y pégalo arriba.</p>
+          <p class="muted small" id="healthHelp">Con el mismo Client ID, los botones "Fitbit" de Hoy y Semana traen tus pasos (y tu peso, si lo registras en Google Health) desde la API de Google Health. En el proyecto de Google Cloud tienen que estar habilitada la "Google Health API" y los permisos <code>googlehealth.activity_and_fitness.readonly</code> y, para el peso, <code>googlehealth.health_metrics_and_measurements.readonly</code>. Para enviar tus comidas (botón de Hoy) hace falta además <code>googlehealth.nutrition.writeonly</code>.</p>
+        </details>
       </section>
     </section>
   </main>
